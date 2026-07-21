@@ -34,7 +34,7 @@ export default function BackupRestore() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await db.transaction('rw', db.buildings, db.flats, db.tenants, db.bills, db.receipts, db.payments, db.settings, async () => {
+      await db.transaction('rw', [db.buildings, db.flats, db.tenants, db.bills, db.receipts, db.payments, db.settings], async () => {
         await Promise.all([
           db.buildings.clear(), db.flats.clear(), db.tenants.clear(),
           db.bills.clear(), db.receipts.clear(), db.payments.clear(), db.settings.clear(),
