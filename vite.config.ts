@@ -1,11 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // IMPORTANT: base must match your GitHub repo name for Pages to work:
 // https://<username>.github.io/<repo-name>/  ->  base: '/<repo-name>/'
 export default defineConfig({
   base: '/buildingbill/',
+  resolve: {
+    alias: { '@': path.resolve(__dirname, 'src') }
+  },
   plugins: [
     react(),
     VitePWA({
