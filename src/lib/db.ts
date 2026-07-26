@@ -70,59 +70,19 @@ export class BuildingBillDB extends Dexie {
 
 export const db = new BuildingBillDB();
 
-// Seeds ONLY the structural demo data (buildings/flats/residents) so the app
-// isn't empty on first run. No invoices, receipts, or payments are seeded —
-// all billing data is created for real through the Bill Generator.
+// No demo/seed data at all. The only thing ensured on first run is a single
+// (empty) settings row, since Bill Generator reads default rates from it —
+// everything else (buildings, flats, residents, invoices...) is created by
+// the user for real.
 export async function seedIfEmpty() {
-  const count = await db.buildings.count();
-  if (count > 0) return;
-
-  const buildingIds = await db.buildings.bulkAdd(
-    [
-      { name: 'Green Tower', address: 'House # 45, Road # 12, Dhanmondi, Dhaka - 1209, Bangladesh', totalFlats: 12 },
-      { name: 'Rose Garden', address: 'Block B, Bashundhara R/A, Dhaka', totalFlats: 12 },
-    ],
-    { allKeys: true }
-  );
-  const [greenTowerId, roseGardenId] = buildingIds as number[];
-
-  const flatDefs = [
-    { buildingId: greenTowerId, unitNo: 'A-3' },
-    { buildingId: greenTowerId, unitNo: 'B-2A' },
-    { buildingId: greenTowerId, unitNo: 'C-3C' },
-    { buildingId: roseGardenId, unitNo: 'A-1A' },
-    { buildingId: roseGardenId, unitNo: 'A-2' },
-  ];
-  const flatIds = await db.flats.bulkAdd(
-    flatDefs.map((f) => ({ ...f, status: 'occupied' as const })),
-    { allKeys: true }
-  );
-
-  const residentDefs: Array<{ name: string; mobile: string; email: string; unitLabel: string; bId: number; fIdx: number; type: 'Tenant' | 'Owner' }> = [
-    { name: 'Aly Hasan', mobile: '01711-223344', email: 'aly.hasan@email.com', unitLabel: 'A-3', bId: greenTowerId, fIdx: 0, type: 'Tenant' },
-    { name: 'Jannatul Ferdaus', mobile: '01822-334455', email: 'jannatul@email.com', unitLabel: 'B-2A', bId: greenTowerId, fIdx: 1, type: 'Owner' },
-    { name: 'Rony Ahmed', mobile: '01633-445566', email: 'rony@email.com', unitLabel: 'C-3C', bId: greenTowerId, fIdx: 2, type: 'Tenant' },
-    { name: 'Sadia Islam', mobile: '01944-556677', email: 'sadia@email.com', unitLabel: 'A-1A', bId: roseGardenId, fIdx: 3, type: 'Owner' },
-    { name: 'Tanvir Hasan', mobile: '01764-778899', email: 'tanvir@email.com', unitLabel: 'A-2', bId: roseGardenId, fIdx: 4, type: 'Tenant' },
-  ];
-
-  await db.residents.bulkAdd(
-    residentDefs.map((t) => ({
-      name: t.name,
-      mobile: t.mobile,
-      email: t.email,
-      flatId: (flatIds as number[])[t.fIdx],
-      buildingId: t.bId,
-      unitLabel: t.unitLabel,
-      type: t.type,
-    }))
-  );
+  const settingsCount = await db.settings.count();
+  if (settingsCount > 0) return;
 
   await db.settings.add({
-    companyName: 'Green Tower',
-    address: 'House # 45, Road # 12, Dhanmondi, Dhaka - 1209, Bangladesh',
-    phone: '01812-045678',
-    email: 'greentower@gmail.com',
+    companyName: '',
+    address: '',
+    phone: '',
+    email: '',
     defaultRates: {
       electricityRate: 0,
       waterCharge: 0,

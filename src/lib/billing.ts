@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import type { Bill } from '@/types';
+import type { Bill, Payment } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 
@@ -13,10 +13,16 @@ export async function genReceiptNo() {
   return `RCPT-2026-${String(43 + count).padStart(4, '0')}`;
 }
 
+function statusFor(bill: Bill, paidAmount: number): Bill['status'] {
+  if (paidAmount >= bill.totalAmount) return 'paid';
+  if (paidAmount > 0) return 'partial';
+  return 'unpaid';
+}
+
 /**
  * Records a payment against an existing bill: updates the bill's paid amount
  * and status, and creates matching Receipt + Payment records. Shared by
- * Bill Generator and Receipt Generator so the logic lives in one place.
+ * Bill Generator, Receipt Generator, and Payments so the logic lives in one place.
  */
 export async function recordPaymentForBill(
   bill: Bill,
@@ -25,7 +31,7 @@ export async function recordPaymentForBill(
 ) {
   if (!bill.id) throw new Error('Bill has no id');
   const newPaid = bill.paidAmount + amountReceived;
-  const status = newPaid >= bill.totalAmount ? 'paid' : newPaid > 0 ? 'partial' : 'unpaid';
+  const status = statusFor(bill, newPaid);
 
   await db.bills.update(bill.id, { paidAmount: newPaid, status });
 
@@ -53,9 +59,24 @@ export async function recordPaymentForBill(
     flatId: bill.flatId,
     method,
     amount: amountReceived,
-    type: newPaid >= bill.totalAmount ? 'Full' : 'Partial',
+    type: status === 'paid' ? 'Full' : 'Partial',
   });
 
   const receipt = await db.receipts.get(receiptId as number);
   return { newPaid, status, receipt: receipt! };
+}
+
+/**
+ * Reverses a payment: removes it, subtracts its amount back off the linked
+ * bill, and recalculates the bill's status. Used by the Payments page's
+ * "remove" action to correct mistakes.
+ */
+export async function removePayment(payment: Payment) {
+  if (!payment.id) return;
+  const bill = await db.bills.get(payment.invoiceId);
+  if (bill && bill.id) {
+    const newPaid = Math.max(0, bill.paidAmount - payment.amount);
+    await db.bills.update(bill.id, { paidAmount: newPaid, status: statusFor(bill, newPaid) });
+  }
+  await db.payments.delete(payment.id);
 }
