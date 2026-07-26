@@ -37,7 +37,7 @@ export default function Residents() {
   }
 
   async function save() {
-    if (!form.name.trim() || !form.mobile.trim()) return;
+    if (!form.name.trim()) return;
     if (form.id) await db.residents.update(form.id, form);
     else await db.residents.add(form);
     setOpen(false);
@@ -85,8 +85,8 @@ export default function Residents() {
                 <td className="table-td">
                   <span className={r.type === 'Owner' ? 'badge-partial' : 'badge-paid'}>{r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}</span>
                 </td>
-                <td className="table-td">{r.mobile}</td>
-                <td className="table-td">{r.email}</td>
+                <td className="table-td">{r.mobile || '—'}</td>
+                <td className="table-td">{r.email || '—'}</td>
                 <td className="table-td">{buildingName(r.buildingId)} · {r.unitLabel}</td>
                 <td className="table-td text-right">
                   <button onClick={() => openEdit(r)} className="text-brand-500 hover:text-brand-700 mr-3"><Pencil size={16} /></button>
@@ -104,16 +104,16 @@ export default function Residents() {
 
       <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'Edit Resident' : 'Add Resident'}>
         <div className="space-y-3">
-          <div><label className="label">Full Name</label>
+          <div><label className="label">Full Name *</label>
             <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
           <div><label className="label">Type</label>
             <select className="input" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as ResidentType })}>
               <option value="Tenant">Tenant</option>
               <option value="Owner">Flat Owner</option>
             </select></div>
-          <div><label className="label">Mobile</label>
+          <div><label className="label">Mobile (optional)</label>
             <input className="input" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} /></div>
-          <div><label className="label">Email</label>
+          <div><label className="label">Email (optional)</label>
             <input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
           <div><label className="label">Flat</label>
             <select className="input" value={form.flatId} onChange={(e) => onFlatChange(Number(e.target.value))}>

@@ -5,8 +5,6 @@ import Buildings from '@/pages/Buildings';
 import Flats from '@/pages/Flats';
 import Residents from '@/pages/Residents';
 import BillGenerator from '@/pages/BillGenerator';
-import InvoiceGenerator from '@/pages/InvoiceGenerator';
-import ReceiptGenerator from '@/pages/ReceiptGenerator';
 import BillsHistory from '@/pages/BillsHistory';
 import Payments from '@/pages/Payments';
 import Reports from '@/pages/Reports';
@@ -26,8 +24,6 @@ export default function App() {
           <Route path="/flats" element={<Flats />} />
           <Route path="/residents" element={<Residents />} />
           <Route path="/billing/generator" element={<BillGenerator />} />
-          <Route path="/billing/invoice-generator" element={<InvoiceGenerator />} />
-          <Route path="/billing/receipt-generator" element={<ReceiptGenerator />} />
           <Route path="/billing/history" element={<BillsHistory />} />
           <Route path="/billing/payments" element={<Payments />} />
           <Route path="/reports" element={<Reports />} />

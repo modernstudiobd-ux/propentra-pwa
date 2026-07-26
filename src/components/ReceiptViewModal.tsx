@@ -6,9 +6,9 @@ export default function ReceiptViewModal({
   receipt, building, flat, resident, onClose,
 }: { receipt: Receipt; building?: Building; flat?: Flat; resident?: Resident; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 no-print">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 modal-backdrop">
       <div className="bg-white rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 sticky top-0 bg-white z-10 no-print">
           <h3 className="font-semibold text-gray-800">Receipt {receipt.receiptNo}</h3>
           <div className="flex items-center gap-3">
             <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2 text-xs">
@@ -45,7 +45,7 @@ export default function ReceiptViewModal({
 
           <div className="space-y-1 text-sm border-t border-gray-100 pt-2">
             <div className="flex justify-between"><span className="text-gray-500">Total Payable (from Invoice)</span><span>{money(receipt.totalPayable)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Previous Balance</span><span>{money(receipt.previousBalance)}</span></div>
+            {receipt.previousBalance > 0 && <div className="flex justify-between"><span className="text-gray-500">Previous Balance</span><span>{money(receipt.previousBalance)}</span></div>}
             <div className="flex justify-between font-medium text-gray-800"><span>Amount Received</span><span>{money(receipt.amountReceived)}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Remaining Balance</span><span>{money(receipt.remainingBalance)}</span></div>
           </div>

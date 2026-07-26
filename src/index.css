@@ -25,4 +25,19 @@
   #print-area, #print-area * { visibility: visible; }
   #print-area { position: absolute; left: 0; top: 0; width: 100%; }
   .no-print { display: none !important; }
+
+  /* Modal-based invoice/receipt printing: reset the backdrop and card so the
+     content isn't clipped by max-height/overflow or covered by the overlay. */
+  .modal-backdrop {
+    position: static !important;
+    background: none !important;
+    padding: 0 !important;
+    display: block !important;
+  }
+  .modal-backdrop > div {
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
 }

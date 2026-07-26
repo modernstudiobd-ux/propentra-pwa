@@ -8,9 +8,9 @@ export default function InvoiceViewModal({
   const electricityAmount = (bill.electricityUnits.current - bill.electricityUnits.previous) * bill.electricityUnits.rate;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 no-print">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 modal-backdrop">
       <div className="bg-white rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 sticky top-0 bg-white z-10">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 sticky top-0 bg-white z-10 no-print">
           <h3 className="font-semibold text-gray-800">Invoice {bill.invoiceNo}</h3>
           <div className="flex items-center gap-3">
             <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2 text-xs">
@@ -53,18 +53,27 @@ export default function InvoiceViewModal({
               <th className="py-2">#</th><th>Particulars</th><th className="text-right">Amount (৳)</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
-              <tr><td className="py-1.5">1</td><td>Electricity ({bill.electricityUnits.current - bill.electricityUnits.previous} Units × {bill.electricityUnits.rate})</td><td className="text-right">{money(electricityAmount)}</td></tr>
-              {bill.charges.map((c, i) => (
-                <tr key={i}><td className="py-1.5">{i + 2}</td><td>{c.label}</td><td className="text-right">{money(c.amount)}</td></tr>
-              ))}
+              {(() => {
+                const lines: { label: string; amount: number }[] = [];
+                if (electricityAmount > 0) {
+                  lines.push({
+                    label: `Electricity (${bill.electricityUnits.current - bill.electricityUnits.previous} Units × ${bill.electricityUnits.rate})`,
+                    amount: electricityAmount,
+                  });
+                }
+                bill.charges.filter((c) => c.amount > 0).forEach((c) => lines.push({ label: c.label, amount: c.amount }));
+                return lines.map((l, i) => (
+                  <tr key={i}><td className="py-1.5">{i + 1}</td><td>{l.label}</td><td className="text-right">{money(l.amount)}</td></tr>
+                ));
+              })()}
             </tbody>
           </table>
 
           <div className="space-y-1 text-sm border-t border-gray-100 pt-2">
             <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>{money(bill.subtotal)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Previous Balance</span><span>{money(bill.previousBalance)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Discount</span><span>-{money(bill.discount)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Penalty / Late Fee</span><span>{money(bill.penalty)}</span></div>
+            {bill.previousBalance > 0 && <div className="flex justify-between"><span className="text-gray-500">Previous Balance</span><span>{money(bill.previousBalance)}</span></div>}
+            {bill.discount > 0 && <div className="flex justify-between"><span className="text-gray-500">Discount</span><span>-{money(bill.discount)}</span></div>}
+            {bill.penalty > 0 && <div className="flex justify-between"><span className="text-gray-500">Penalty / Late Fee</span><span>{money(bill.penalty)}</span></div>}
           </div>
 
           <div className="flex justify-between items-center border-t border-gray-100 mt-2 pt-2">

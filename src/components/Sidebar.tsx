@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, Building2, Home, Users, Receipt, FileText, FileEdit,
+  LayoutDashboard, Building2, Home, Users, Receipt, FileText,
   History, CreditCard, BarChart3, Settings, DatabaseBackup,
   ChevronDown, X, HelpCircle,
 } from 'lucide-react';
@@ -16,8 +16,6 @@ const nav = [
 
 const billingNav = [
   { to: '/billing/generator', label: 'Bill Generator', icon: FileText },
-  { to: '/billing/invoice-generator', label: 'Invoice Generator', icon: FileEdit },
-  { to: '/billing/receipt-generator', label: 'Receipt Generator', icon: Receipt },
   { to: '/billing/history', label: 'Bills History', icon: History },
 ];
 

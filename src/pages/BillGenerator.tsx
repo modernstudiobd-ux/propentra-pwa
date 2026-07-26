@@ -3,8 +3,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel, numberToWords } from '@/lib/format';
 import { genInvoiceNo, recordPaymentForBill } from '@/lib/billing';
-import { Printer, Save, RotateCcw, Landmark, Plus, Trash2 } from 'lucide-react';
-import type { Bill, ChargeLine } from '@/types';
+import { buildInvoiceMessage, buildReceiptMessage, whatsappLink, smsLink } from '@/lib/messaging';
+import { Printer, Save, RotateCcw, Landmark, Plus, Trash2, MessageCircle, MessageSquare, FileText, Receipt as ReceiptIcon } from 'lucide-react';
+import InvoiceGenerator from '@/pages/InvoiceGenerator';
+import ReceiptGenerator from '@/pages/ReceiptGenerator';
+import type { Bill, ChargeLine, Receipt } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 function addDaysISO(iso: string, days: number) {
@@ -13,7 +16,34 @@ function addDaysISO(iso: string, days: number) {
 
 const defaultChargeLabels = ['Water Charge', 'Gas Charge', 'Lift Charge', 'Security Charge', 'Cleaning Charge', 'Internet Charge'];
 
+const tabs = [
+  { key: 'bill', label: 'Bill Generator', icon: FileText },
+  { key: 'invoices', label: 'Invoice Generator', icon: FileText },
+  { key: 'receipts', label: 'Receipt Generator', icon: ReceiptIcon },
+] as const;
+
 export default function BillGenerator() {
+  const [tab, setTab] = useState<typeof tabs[number]['key']>('bill');
+
+  return (
+    <div className="space-y-5">
+      <div className="flex gap-2 flex-wrap no-print">
+        {tabs.map((t) => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${tab === t.key ? 'bg-brand-500 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
+            <t.icon size={15} /> {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'bill' && <BillGeneratorForm />}
+      {tab === 'invoices' && <InvoiceGenerator />}
+      {tab === 'receipts' && <ReceiptGenerator />}
+    </div>
+  );
+}
+
+function BillGeneratorForm() {
   const buildings = useLiveQuery(() => db.buildings.toArray(), []) ?? [];
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
   const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
@@ -64,6 +94,7 @@ export default function BillGenerator() {
   const [showReceiptForm, setShowReceiptForm] = useState(false);
   const [receiptAmount, setReceiptAmount] = useState(0);
   const [receiptMethod, setReceiptMethod] = useState<'Cash' | 'bKash' | 'Nagad' | 'Bank'>('Cash');
+  const [lastReceipt, setLastReceipt] = useState<Receipt | null>(null);
 
   const buildingFlats = flats.filter((f) => f.buildingId === buildingId);
   const flatResidents = residents.filter((r) => r.flatId === flatId);
@@ -93,6 +124,7 @@ export default function BillGenerator() {
     setCharges(charges.map((c) => ({ ...c, amount: 0 })));
     setPreviousBalance(0); setDiscount(0); setPenalty(0);
     setGeneratedBill(null);
+    setLastReceipt(null);
   }
 
   async function generateInvoice() {
@@ -119,18 +151,24 @@ export default function BillGenerator() {
     const id = await db.bills.add(bill);
     setGeneratedBill({ ...bill, id: id as number });
     setReceiptAmount(totalAmount);
+    setLastReceipt(null);
   }
 
   async function recordPayment() {
     if (!generatedBill) return;
-    const { newPaid, status } = await recordPaymentForBill(generatedBill, receiptAmount, receiptMethod);
+    const { newPaid, status, receipt } = await recordPaymentForBill(generatedBill, receiptAmount, receiptMethod);
     setShowReceiptForm(false);
     setGeneratedBill({ ...generatedBill, paidAmount: newPaid, status });
+    setLastReceipt(receipt);
   }
 
   const building = buildings.find((b) => b.id === (generatedBill?.buildingId ?? buildingId));
   const resident = residents.find((r) => r.id === (generatedBill?.residentId ?? residentId));
   const flat = flats.find((f) => f.id === (generatedBill?.flatId ?? flatId));
+
+  const hasMobile = !!resident?.mobile?.trim();
+  const invoiceMessage = generatedBill && resident ? buildInvoiceMessage(generatedBill, resident, building, flat, settings?.companyName) : '';
+  const receiptMessage = lastReceipt && resident ? buildReceiptMessage(lastReceipt, resident, building, flat, settings?.companyName) : '';
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -177,7 +215,9 @@ export default function BillGenerator() {
             <div><label className="label">Rate per Unit (৳)</label>
               <input type="number" className="input" value={rate || ''} placeholder="0" onChange={(e) => setRate(Number(e.target.value))} /></div>
           </div>
-          <div className="text-sm text-gray-500">Units used: <b className="text-gray-800">{units}</b> · Electricity: <b className="text-gray-800">{money(electricityAmount)}</b></div>
+          <div className="text-sm text-gray-500">Units used: <b className="text-gray-800">{units}</b> · Electricity: <b className="text-gray-800">{money(electricityAmount)}</b>
+            {units === 0 && <span className="text-gray-400"> (excluded from invoice while 0)</span>}
+          </div>
         </div>
 
         <div className="card p-5 space-y-3">
@@ -208,6 +248,7 @@ export default function BillGenerator() {
             ))}
             {charges.length === 0 && <div className="text-xs text-gray-400">No charges added yet — click "Add Charge".</div>}
           </div>
+          <div className="text-xs text-gray-400">Charges left at 0 are automatically excluded from the invoice.</div>
           <div className="grid grid-cols-3 gap-3 pt-2">
             <div><label className="label">Previous Balance</label>
               <input type="number" className="input" value={previousBalance || ''} placeholder="0" onChange={(e) => setPreviousBalance(Number(e.target.value))} /></div>
@@ -221,11 +262,18 @@ export default function BillGenerator() {
         <div className="card p-5">
           <h3 className="font-semibold text-gray-800 mb-2">5. Summary</h3>
           <div className="space-y-1 text-sm text-gray-600">
-            <div className="flex justify-between"><span>Electricity ({units} Units)</span><span>{money(electricityAmount)}</span></div>
-            {charges.map((c, i) => <div key={i} className="flex justify-between"><span>{c.label || '—'}</span><span>{money(c.amount)}</span></div>)}
-            <div className="flex justify-between"><span>Previous Balance</span><span>{money(previousBalance)}</span></div>
-            <div className="flex justify-between"><span>Discount</span><span>-{money(discount)}</span></div>
-            <div className="flex justify-between"><span>Penalty / Late Fee</span><span>{money(penalty)}</span></div>
+            {electricityAmount > 0 && (
+              <div className="flex justify-between"><span>Electricity ({units} Units)</span><span>{money(electricityAmount)}</span></div>
+            )}
+            {charges.filter((c) => c.amount > 0).map((c, i) => (
+              <div key={i} className="flex justify-between"><span>{c.label || '—'}</span><span>{money(c.amount)}</span></div>
+            ))}
+            {previousBalance > 0 && <div className="flex justify-between"><span>Previous Balance</span><span>{money(previousBalance)}</span></div>}
+            {discount > 0 && <div className="flex justify-between"><span>Discount</span><span>-{money(discount)}</span></div>}
+            {penalty > 0 && <div className="flex justify-between"><span>Penalty / Late Fee</span><span>{money(penalty)}</span></div>}
+            {electricityAmount === 0 && chargesTotal === 0 && previousBalance === 0 && discount === 0 && penalty === 0 && (
+              <div className="text-gray-400 text-xs py-2">Enter meter readings or charges above to build the invoice.</div>
+            )}
           </div>
           <div className="flex justify-between items-center pt-3 mt-2 border-t border-gray-100">
             <span className="font-semibold text-gray-800">Total Amount</span>
@@ -241,12 +289,31 @@ export default function BillGenerator() {
       {/* PREVIEW */}
       <div className="space-y-4">
         <div className="card p-0 overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 no-print">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 border-b border-gray-100 no-print">
             <h3 className="font-semibold text-gray-800">Invoice Preview</h3>
             {generatedBill && (
-              <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2 text-xs">
-                <Printer size={14} /> Print / Save as PDF
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2 text-xs">
+                  <Printer size={14} /> Print / PDF
+                </button>
+                <a
+                  href={hasMobile ? whatsappLink(resident!.mobile, invoiceMessage) : undefined}
+                  target="_blank" rel="noreferrer"
+                  onClick={(e) => { if (!hasMobile) e.preventDefault(); }}
+                  title={hasMobile ? 'Send invoice via WhatsApp' : 'No mobile number on file for this resident'}
+                  className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium ${hasMobile ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                >
+                  <MessageCircle size={14} /> WhatsApp
+                </a>
+                <a
+                  href={hasMobile ? smsLink(resident!.mobile, invoiceMessage) : undefined}
+                  onClick={(e) => { if (!hasMobile) e.preventDefault(); }}
+                  title={hasMobile ? 'Send invoice via SMS' : 'No mobile number on file for this resident'}
+                  className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium ${hasMobile ? 'bg-sky-50 text-sky-700 hover:bg-sky-100' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                >
+                  <MessageSquare size={14} /> SMS
+                </a>
+              </div>
             )}
           </div>
 
@@ -291,7 +358,7 @@ export default function BillGenerator() {
                   <div className="text-gray-400 text-xs mb-1">Billed To</div>
                   <div className="font-medium text-gray-800">{resident?.name} <span className="text-xs text-gray-400 font-normal">({resident?.type === 'Owner' ? 'Flat Owner' : 'Tenant'})</span></div>
                   <div className="text-gray-500 text-xs">Flat {flat?.unitNo}, {building?.name}</div>
-                  <div className="text-gray-500 text-xs">{resident?.mobile}</div>
+                  {resident?.mobile && <div className="text-gray-500 text-xs">{resident.mobile}</div>}
                 </div>
 
                 <table className="w-full text-sm mb-3">
@@ -299,18 +366,27 @@ export default function BillGenerator() {
                     <th className="py-2">#</th><th>Particulars</th><th className="text-right">Amount (৳)</th>
                   </tr></thead>
                   <tbody className="divide-y divide-gray-50">
-                    <tr><td className="py-1.5">1</td><td>Electricity ({generatedBill.electricityUnits.current - generatedBill.electricityUnits.previous} Units × {generatedBill.electricityUnits.rate})</td><td className="text-right">{money(electricityAmount)}</td></tr>
-                    {generatedBill.charges.map((c, i) => (
-                      <tr key={i}><td className="py-1.5">{i + 2}</td><td>{c.label}</td><td className="text-right">{money(c.amount)}</td></tr>
-                    ))}
+                    {(() => {
+                      const lines: { label: string; amount: number }[] = [];
+                      if (electricityAmount > 0) {
+                        lines.push({
+                          label: `Electricity (${generatedBill.electricityUnits.current - generatedBill.electricityUnits.previous} Units × ${generatedBill.electricityUnits.rate})`,
+                          amount: electricityAmount,
+                        });
+                      }
+                      generatedBill.charges.filter((c) => c.amount > 0).forEach((c) => lines.push({ label: c.label, amount: c.amount }));
+                      return lines.map((l, i) => (
+                        <tr key={i}><td className="py-1.5">{i + 1}</td><td>{l.label}</td><td className="text-right">{money(l.amount)}</td></tr>
+                      ));
+                    })()}
                   </tbody>
                 </table>
 
                 <div className="space-y-1 text-sm border-t border-gray-100 pt-2">
                   <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>{money(generatedBill.subtotal)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Previous Balance</span><span>{money(generatedBill.previousBalance)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Discount</span><span>-{money(generatedBill.discount)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Penalty / Late Fee</span><span>{money(generatedBill.penalty)}</span></div>
+                  {generatedBill.previousBalance > 0 && <div className="flex justify-between"><span className="text-gray-500">Previous Balance</span><span>{money(generatedBill.previousBalance)}</span></div>}
+                  {generatedBill.discount > 0 && <div className="flex justify-between"><span className="text-gray-500">Discount</span><span>-{money(generatedBill.discount)}</span></div>}
+                  {generatedBill.penalty > 0 && <div className="flex justify-between"><span className="text-gray-500">Penalty / Late Fee</span><span>{money(generatedBill.penalty)}</span></div>}
                 </div>
 
                 <div className="flex justify-between items-center border-t border-gray-100 mt-2 pt-2">
@@ -351,7 +427,37 @@ export default function BillGenerator() {
           </div>
         )}
 
-        {generatedBill && generatedBill.status === 'paid' && (
+        {lastReceipt && (
+          <div className="card p-5 no-print space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-emerald-600">✓ Receipt {lastReceipt.receiptNo} generated</div>
+                <div className="text-xs text-gray-400">Amount received: {money(lastReceipt.amountReceived)}</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={hasMobile ? whatsappLink(resident!.mobile, receiptMessage) : undefined}
+                target="_blank" rel="noreferrer"
+                onClick={(e) => { if (!hasMobile) e.preventDefault(); }}
+                title={hasMobile ? 'Send receipt via WhatsApp' : 'No mobile number on file for this resident'}
+                className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium ${hasMobile ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+              >
+                <MessageCircle size={14} /> Send Receipt via WhatsApp
+              </a>
+              <a
+                href={hasMobile ? smsLink(resident!.mobile, receiptMessage) : undefined}
+                onClick={(e) => { if (!hasMobile) e.preventDefault(); }}
+                title={hasMobile ? 'Send receipt via SMS' : 'No mobile number on file for this resident'}
+                className={`flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium ${hasMobile ? 'bg-sky-50 text-sky-700 hover:bg-sky-100' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+              >
+                <MessageSquare size={14} /> Send Receipt via SMS
+              </a>
+            </div>
+          </div>
+        )}
+
+        {generatedBill && generatedBill.status === 'paid' && !lastReceipt && (
           <div className="card p-5 text-center text-emerald-600 font-medium">✓ Fully Paid</div>
         )}
       </div>
