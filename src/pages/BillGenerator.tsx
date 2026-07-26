@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel, numberToWords } from '@/lib/format';
+import { genInvoiceNo, recordPaymentForBill } from '@/lib/billing';
 import { Printer, Save, RotateCcw, Landmark, Plus, Trash2 } from 'lucide-react';
 import type { Bill, ChargeLine } from '@/types';
 
@@ -9,8 +10,6 @@ function todayISO() { return new Date().toISOString().slice(0, 10); }
 function addDaysISO(iso: string, days: number) {
   const d = new Date(iso); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10);
 }
-function genInvoiceNo(existing: number) { return `INV-2026-${String(76 + existing).padStart(3, '0')}`; }
-function genReceiptNo(existing: number) { return `RCPT-2026-${String(43 + existing).padStart(4, '0')}`; }
 
 const defaultChargeLabels = ['Water Charge', 'Gas Charge', 'Lift Charge', 'Security Charge', 'Cleaning Charge', 'Internet Charge'];
 
@@ -19,8 +18,6 @@ export default function BillGenerator() {
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
   const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
   const settings = useLiveQuery(() => db.settings.toCollection().first(), []);
-  const billCount = useLiveQuery(() => db.bills.count(), []) ?? 0;
-  const receiptCount = useLiveQuery(() => db.receipts.count(), []) ?? 0;
 
   const [buildingId, setBuildingId] = useState<number | ''>('');
   const [flatId, setFlatId] = useState<number | ''>('');
@@ -102,7 +99,7 @@ export default function BillGenerator() {
     if (!buildingId || !flatId || !residentId) { alert('Please select building, flat and resident.'); return; }
     if (charges.some((c) => !c.label.trim())) { alert('Every charge line needs a label.'); return; }
     const bill: Bill = {
-      invoiceNo: genInvoiceNo(billCount),
+      invoiceNo: await genInvoiceNo(),
       buildingId: buildingId as number,
       flatId: flatId as number,
       residentId: residentId as number,
@@ -125,34 +122,8 @@ export default function BillGenerator() {
   }
 
   async function recordPayment() {
-    if (!generatedBill?.id) return;
-    const newPaid = generatedBill.paidAmount + receiptAmount;
-    const status = newPaid >= generatedBill.totalAmount ? 'paid' : newPaid > 0 ? 'partial' : 'unpaid';
-    await db.bills.update(generatedBill.id, { paidAmount: newPaid, status });
-    await db.receipts.add({
-      receiptNo: genReceiptNo(receiptCount),
-      invoiceId: generatedBill.id,
-      residentId: generatedBill.residentId,
-      buildingId: generatedBill.buildingId,
-      flatId: generatedBill.flatId,
-      date: todayISO(),
-      amountReceived: receiptAmount,
-      previousBalance: generatedBill.previousBalance,
-      totalPayable: generatedBill.totalAmount,
-      remainingBalance: generatedBill.totalAmount - newPaid,
-      method: receiptMethod,
-      receivedBy: 'Manager',
-    });
-    await db.payments.add({
-      date: todayISO(),
-      invoiceId: generatedBill.id,
-      residentId: generatedBill.residentId,
-      buildingId: generatedBill.buildingId,
-      flatId: generatedBill.flatId,
-      method: receiptMethod,
-      amount: receiptAmount,
-      type: newPaid >= generatedBill.totalAmount ? 'Full' : 'Partial',
-    });
+    if (!generatedBill) return;
+    const { newPaid, status } = await recordPaymentForBill(generatedBill, receiptAmount, receiptMethod);
     setShowReceiptForm(false);
     setGeneratedBill({ ...generatedBill, paidAmount: newPaid, status });
   }

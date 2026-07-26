@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel } from '@/lib/format';
-import { Search, Trash2 } from 'lucide-react';
+import { Search, Trash2, Eye, Printer } from 'lucide-react';
+import InvoiceViewModal from '@/components/InvoiceViewModal';
+import type { Bill } from '@/types';
 
 export default function BillsHistory() {
   const bills = useLiveQuery(() => db.bills.orderBy('id').reverse().toArray(), []) ?? [];
@@ -13,6 +15,7 @@ export default function BillsHistory() {
   const [query, setQuery] = useState('');
   const [buildingFilter, setBuildingFilter] = useState<number | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'unpaid' | 'partial'>('all');
+  const [viewBill, setViewBill] = useState<Bill | null>(null);
 
   const residentName = (id: number) => residents.find((r) => r.id === id)?.name ?? '—';
   const flatLabel = (id: number) => flats.find((f) => f.id === id)?.unitNo ?? '—';
@@ -72,6 +75,8 @@ export default function BillsHistory() {
                 </td>
                 <td className="table-td">{dateLabel(b.dueDate)}</td>
                 <td className="table-td text-right">
+                  <button onClick={() => setViewBill(b)} className="text-brand-500 hover:text-brand-700 mr-3"><Eye size={16} /></button>
+                  <button onClick={() => { setViewBill(b); setTimeout(() => window.print(), 150); }} className="text-gray-400 hover:text-brand-600 mr-3"><Printer size={16} /></button>
                   <button onClick={() => remove(b.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
                 </td>
               </tr>
@@ -81,6 +86,16 @@ export default function BillsHistory() {
         </table>
         <div className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100">Total: {filtered.length} invoices</div>
       </div>
+
+      {viewBill && (
+        <InvoiceViewModal
+          bill={viewBill}
+          building={buildings.find((b) => b.id === viewBill.buildingId)}
+          flat={flats.find((f) => f.id === viewBill.flatId)}
+          resident={residents.find((r) => r.id === viewBill.residentId)}
+          onClose={() => setViewBill(null)}
+        />
+      )}
     </div>
   );
 }
