@@ -7,20 +7,20 @@ import { Search, Trash2 } from 'lucide-react';
 export default function BillsHistory() {
   const bills = useLiveQuery(() => db.bills.orderBy('id').reverse().toArray(), []) ?? [];
   const buildings = useLiveQuery(() => db.buildings.toArray(), []) ?? [];
-  const tenants = useLiveQuery(() => db.tenants.toArray(), []) ?? [];
+  const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
 
   const [query, setQuery] = useState('');
   const [buildingFilter, setBuildingFilter] = useState<number | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'unpaid' | 'partial'>('all');
 
-  const tenantName = (id: number) => tenants.find((t) => t.id === id)?.name ?? '—';
+  const residentName = (id: number) => residents.find((r) => r.id === id)?.name ?? '—';
   const flatLabel = (id: number) => flats.find((f) => f.id === id)?.unitNo ?? '—';
 
   const filtered = bills.filter((b) =>
     (buildingFilter === 'all' || b.buildingId === buildingFilter) &&
     (statusFilter === 'all' || b.status === statusFilter) &&
-    (b.invoiceNo.toLowerCase().includes(query.toLowerCase()) || tenantName(b.tenantId).toLowerCase().includes(query.toLowerCase()))
+    (b.invoiceNo.toLowerCase().includes(query.toLowerCase()) || residentName(b.residentId).toLowerCase().includes(query.toLowerCase()))
   );
 
   async function remove(id?: number) {
@@ -34,7 +34,7 @@ export default function BillsHistory() {
       <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search invoice or tenant..." className="input pl-9" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search invoice or resident..." className="input pl-9" />
         </div>
         <select className="input sm:w-48" value={buildingFilter} onChange={(e) => setBuildingFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
           <option value="all">All Buildings</option>
@@ -52,7 +52,7 @@ export default function BillsHistory() {
         <table className="w-full min-w-[800px]">
           <thead className="bg-gray-50">
             <tr>
-              <th className="table-th">#</th><th className="table-th">Invoice</th><th className="table-th">Tenant / Flat</th>
+              <th className="table-th">#</th><th className="table-th">Invoice</th><th className="table-th">Resident / Flat</th>
               <th className="table-th">Month</th><th className="table-th">Total (৳)</th><th className="table-th">Status</th>
               <th className="table-th">Due Date</th><th className="table-th text-right">Action</th>
             </tr>
@@ -62,7 +62,7 @@ export default function BillsHistory() {
               <tr key={b.id}>
                 <td className="table-td">{i + 1}</td>
                 <td className="table-td font-medium text-gray-800">{b.invoiceNo}</td>
-                <td className="table-td">{tenantName(b.tenantId)} ({flatLabel(b.flatId)})</td>
+                <td className="table-td">{residentName(b.residentId)} ({flatLabel(b.flatId)})</td>
                 <td className="table-td">{b.billingMonth}</td>
                 <td className="table-td">{money(b.totalAmount)}</td>
                 <td className="table-td">

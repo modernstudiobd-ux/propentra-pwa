@@ -13,7 +13,7 @@ export default function BackupRestore() {
       exportedAt: new Date().toISOString(),
       buildings: await db.buildings.toArray(),
       flats: await db.flats.toArray(),
-      tenants: await db.tenants.toArray(),
+      residents: await db.residents.toArray(),
       bills: await db.bills.toArray(),
       receipts: await db.receipts.toArray(),
       payments: await db.payments.toArray(),
@@ -34,14 +34,14 @@ export default function BackupRestore() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await db.transaction('rw', [db.buildings, db.flats, db.tenants, db.bills, db.receipts, db.payments, db.settings], async () => {
+      await db.transaction('rw', [db.buildings, db.flats, db.residents, db.bills, db.receipts, db.payments, db.settings], async () => {
         await Promise.all([
-          db.buildings.clear(), db.flats.clear(), db.tenants.clear(),
+          db.buildings.clear(), db.flats.clear(), db.residents.clear(),
           db.bills.clear(), db.receipts.clear(), db.payments.clear(), db.settings.clear(),
         ]);
         if (data.buildings) await db.buildings.bulkAdd(data.buildings);
         if (data.flats) await db.flats.bulkAdd(data.flats);
-        if (data.tenants) await db.tenants.bulkAdd(data.tenants);
+        if (data.residents) await db.residents.bulkAdd(data.residents);
         if (data.bills) await db.bills.bulkAdd(data.bills);
         if (data.receipts) await db.receipts.bulkAdd(data.receipts);
         if (data.payments) await db.payments.bulkAdd(data.payments);

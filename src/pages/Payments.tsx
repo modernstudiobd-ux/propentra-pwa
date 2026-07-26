@@ -7,16 +7,16 @@ import { Search } from 'lucide-react';
 export default function Payments() {
   const payments = useLiveQuery(() => db.payments.orderBy('id').reverse().toArray(), []) ?? [];
   const bills = useLiveQuery(() => db.bills.toArray(), []) ?? [];
-  const tenants = useLiveQuery(() => db.tenants.toArray(), []) ?? [];
+  const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
   const [query, setQuery] = useState('');
 
-  const tenantName = (id: number) => tenants.find((t) => t.id === id)?.name ?? '—';
+  const residentName = (id: number) => residents.find((r) => r.id === id)?.name ?? '—';
   const flatLabel = (id: number) => flats.find((f) => f.id === id)?.unitNo ?? '—';
   const invoiceNo = (id: number) => bills.find((b) => b.id === id)?.invoiceNo ?? '—';
 
   const filtered = payments.filter((p) =>
-    tenantName(p.tenantId).toLowerCase().includes(query.toLowerCase()) || invoiceNo(p.invoiceId).toLowerCase().includes(query.toLowerCase())
+    residentName(p.residentId).toLowerCase().includes(query.toLowerCase()) || invoiceNo(p.invoiceId).toLowerCase().includes(query.toLowerCase())
   );
   const total = filtered.reduce((s, p) => s + p.amount, 0);
 
@@ -34,7 +34,7 @@ export default function Payments() {
           <thead className="bg-gray-50">
             <tr>
               <th className="table-th">#</th><th className="table-th">Date</th><th className="table-th">Invoice #</th>
-              <th className="table-th">Tenant / Flat</th><th className="table-th">Method</th>
+              <th className="table-th">Resident / Flat</th><th className="table-th">Method</th>
               <th className="table-th">Amount (৳)</th><th className="table-th">Type</th>
             </tr>
           </thead>
@@ -44,7 +44,7 @@ export default function Payments() {
                 <td className="table-td">{i + 1}</td>
                 <td className="table-td">{dateLabel(p.date)}</td>
                 <td className="table-td font-medium text-gray-800">{invoiceNo(p.invoiceId)}</td>
-                <td className="table-td">{tenantName(p.tenantId)} ({flatLabel(p.flatId)})</td>
+                <td className="table-td">{residentName(p.residentId)} ({flatLabel(p.flatId)})</td>
                 <td className="table-td">{p.method}</td>
                 <td className="table-td">{money(p.amount)}</td>
                 <td className="table-td">

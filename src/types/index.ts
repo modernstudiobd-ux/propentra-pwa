@@ -13,7 +13,9 @@ export interface Flat {
   status: 'occupied' | 'vacant';
 }
 
-export interface Tenant {
+export type ResidentType = 'Tenant' | 'Owner';
+
+export interface Resident {
   id?: number;
   name: string;
   mobile: string;
@@ -21,6 +23,7 @@ export interface Tenant {
   flatId: number;
   buildingId: number;
   unitLabel: string; // denormalized e.g. "A-3"
+  type: ResidentType;
 }
 
 export interface ChargeLine {
@@ -33,12 +36,12 @@ export interface Bill {
   invoiceNo: string;
   buildingId: number;
   flatId: number;
-  tenantId: number;
+  residentId: number;
   billingMonth: string; // e.g. "July 2026"
   issueDate: string; // ISO
   dueDate: string; // ISO
   electricityUnits: { previous: number; current: number; rate: number };
-  charges: ChargeLine[]; // water, gas, lift, security, cleaning, internet, other
+  charges: ChargeLine[]; // fully user-editable: water, gas, lift, security, cleaning, internet, custom...
   previousBalance: number;
   discount: number;
   penalty: number;
@@ -52,7 +55,7 @@ export interface Receipt {
   id?: number;
   receiptNo: string;
   invoiceId: number;
-  tenantId: number;
+  residentId: number;
   buildingId: number;
   flatId: number;
   date: string; // ISO
@@ -68,7 +71,7 @@ export interface Payment {
   id?: number;
   date: string;
   invoiceId: number;
-  tenantId: number;
+  residentId: number;
   buildingId: number;
   flatId: number;
   method: 'Cash' | 'bKash' | 'Nagad' | 'Bank';

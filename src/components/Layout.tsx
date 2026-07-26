@@ -7,13 +7,14 @@ const titles: Record<string, string> = {
   '/': 'Dashboard',
   '/buildings': 'Buildings',
   '/flats': 'Flats',
-  '/tenants': 'Tenants',
+  '/residents': 'Residents',
   '/billing/generator': 'Bill Generator',
   '/billing/history': 'Bills History',
   '/billing/payments': 'Payments',
   '/reports': 'Reports',
   '/settings': 'Settings',
   '/backup': 'Backup & Restore',
+  '/help': 'Help',
 };
 
 export default function Layout() {

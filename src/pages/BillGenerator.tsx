@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel, numberToWords } from '@/lib/format';
-import { Printer, Save, RotateCcw, Landmark } from 'lucide-react';
+import { Printer, Save, RotateCcw, Landmark, Plus, Trash2 } from 'lucide-react';
 import type { Bill, ChargeLine } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -12,37 +12,56 @@ function addDaysISO(iso: string, days: number) {
 function genInvoiceNo(existing: number) { return `INV-2026-${String(76 + existing).padStart(3, '0')}`; }
 function genReceiptNo(existing: number) { return `RCPT-2026-${String(43 + existing).padStart(4, '0')}`; }
 
+const defaultChargeLabels = ['Water Charge', 'Gas Charge', 'Lift Charge', 'Security Charge', 'Cleaning Charge', 'Internet Charge'];
+
 export default function BillGenerator() {
   const buildings = useLiveQuery(() => db.buildings.toArray(), []) ?? [];
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
-  const tenants = useLiveQuery(() => db.tenants.toArray(), []) ?? [];
+  const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
   const settings = useLiveQuery(() => db.settings.toCollection().first(), []);
   const billCount = useLiveQuery(() => db.bills.count(), []) ?? 0;
   const receiptCount = useLiveQuery(() => db.receipts.count(), []) ?? 0;
 
   const [buildingId, setBuildingId] = useState<number | ''>('');
   const [flatId, setFlatId] = useState<number | ''>('');
-  const [tenantId, setTenantId] = useState<number | ''>('');
-  const [month, setMonth] = useState('July 2026');
+  const [residentId, setResidentId] = useState<number | ''>('');
+  const [month, setMonth] = useState('');
   const [issueDate, setIssueDate] = useState(todayISO());
   const [dueDate, setDueDate] = useState(addDaysISO(todayISO(), 21));
 
-  const [prevReading, setPrevReading] = useState(12350);
-  const [currReading, setCurrReading] = useState(12465);
-  const [rate, setRate] = useState(settings?.defaultRates.electricityRate ?? 12);
+  // Meter readings: no fake demo numbers — everything starts at 0 and is entered per bill.
+  const [prevReading, setPrevReading] = useState(0);
+  const [currReading, setCurrReading] = useState(0);
+  const [rate, setRate] = useState(0);
 
-  const [charges, setCharges] = useState<ChargeLine[]>([
-    { label: 'Water Charge', amount: 300 },
-    { label: 'Gas Charge', amount: 800 },
-    { label: 'Lift Charge', amount: 500 },
-    { label: 'Security Charge', amount: 700 },
-    { label: 'Cleaning Charge', amount: 500 },
-    { label: 'Internet Charge', amount: 600 },
-    { label: 'Other Charge', amount: 0 },
-  ]);
+  const [charges, setCharges] = useState<ChargeLine[]>([]);
+  const [ratesInitialized, setRatesInitialized] = useState(false);
   const [previousBalance, setPreviousBalance] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [penalty, setPenalty] = useState(0);
+
+  // Pull defaults from Settings (configured by the user) exactly once, instead
+  // of hardcoding amounts in the form itself.
+  useEffect(() => {
+    if (settings && !ratesInitialized) {
+      setRate(settings.defaultRates.electricityRate);
+      setCharges([
+        { label: 'Water Charge', amount: settings.defaultRates.waterCharge },
+        { label: 'Gas Charge', amount: settings.defaultRates.gasCharge },
+        { label: 'Lift Charge', amount: settings.defaultRates.liftCharge },
+        { label: 'Security Charge', amount: settings.defaultRates.securityCharge },
+        { label: 'Cleaning Charge', amount: settings.defaultRates.cleaningCharge },
+        { label: 'Internet Charge', amount: settings.defaultRates.internetCharge },
+      ]);
+      setRatesInitialized(true);
+    }
+  }, [settings, ratesInitialized]);
+
+  useEffect(() => {
+    if (!month) {
+      setMonth(new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }));
+    }
+  }, [month]);
 
   const [generatedBill, setGeneratedBill] = useState<Bill | null>(null);
   const [showReceiptForm, setShowReceiptForm] = useState(false);
@@ -50,7 +69,7 @@ export default function BillGenerator() {
   const [receiptMethod, setReceiptMethod] = useState<'Cash' | 'bKash' | 'Nagad' | 'Bank'>('Cash');
 
   const buildingFlats = flats.filter((f) => f.buildingId === buildingId);
-  const flatTenants = tenants.filter((t) => t.flatId === flatId);
+  const flatResidents = residents.filter((r) => r.flatId === flatId);
 
   const units = Math.max(0, currReading - prevReading);
   const electricityAmount = units * rate;
@@ -58,12 +77,21 @@ export default function BillGenerator() {
   const subtotal = electricityAmount + chargesTotal + previousBalance;
   const totalAmount = Math.max(0, subtotal - discount + penalty);
 
-  function updateCharge(idx: number, amount: number) {
+  function updateChargeAmount(idx: number, amount: number) {
     setCharges((prev) => prev.map((c, i) => (i === idx ? { ...c, amount } : c)));
+  }
+  function updateChargeLabel(idx: number, label: string) {
+    setCharges((prev) => prev.map((c, i) => (i === idx ? { ...c, label } : c)));
+  }
+  function addCustomCharge() {
+    setCharges((prev) => [...prev, { label: '', amount: 0 }]);
+  }
+  function removeCharge(idx: number) {
+    setCharges((prev) => prev.filter((_, i) => i !== idx));
   }
 
   function reset() {
-    setBuildingId(''); setFlatId(''); setTenantId('');
+    setBuildingId(''); setFlatId(''); setResidentId('');
     setPrevReading(0); setCurrReading(0);
     setCharges(charges.map((c) => ({ ...c, amount: 0 })));
     setPreviousBalance(0); setDiscount(0); setPenalty(0);
@@ -71,12 +99,13 @@ export default function BillGenerator() {
   }
 
   async function generateInvoice() {
-    if (!buildingId || !flatId || !tenantId) { alert('Please select building, flat and tenant.'); return; }
+    if (!buildingId || !flatId || !residentId) { alert('Please select building, flat and resident.'); return; }
+    if (charges.some((c) => !c.label.trim())) { alert('Every charge line needs a label.'); return; }
     const bill: Bill = {
       invoiceNo: genInvoiceNo(billCount),
       buildingId: buildingId as number,
       flatId: flatId as number,
-      tenantId: tenantId as number,
+      residentId: residentId as number,
       billingMonth: month,
       issueDate,
       dueDate,
@@ -103,7 +132,7 @@ export default function BillGenerator() {
     await db.receipts.add({
       receiptNo: genReceiptNo(receiptCount),
       invoiceId: generatedBill.id,
-      tenantId: generatedBill.tenantId,
+      residentId: generatedBill.residentId,
       buildingId: generatedBill.buildingId,
       flatId: generatedBill.flatId,
       date: todayISO(),
@@ -117,7 +146,7 @@ export default function BillGenerator() {
     await db.payments.add({
       date: todayISO(),
       invoiceId: generatedBill.id,
-      tenantId: generatedBill.tenantId,
+      residentId: generatedBill.residentId,
       buildingId: generatedBill.buildingId,
       flatId: generatedBill.flatId,
       method: receiptMethod,
@@ -129,7 +158,7 @@ export default function BillGenerator() {
   }
 
   const building = buildings.find((b) => b.id === (generatedBill?.buildingId ?? buildingId));
-  const tenant = tenants.find((t) => t.id === (generatedBill?.tenantId ?? tenantId));
+  const resident = residents.find((r) => r.id === (generatedBill?.residentId ?? residentId));
   const flat = flats.find((f) => f.id === (generatedBill?.flatId ?? flatId));
 
   return (
@@ -140,20 +169,20 @@ export default function BillGenerator() {
           <h3 className="font-semibold text-gray-800">1. Select</h3>
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label">Building</label>
-              <select className="input" value={buildingId} onChange={(e) => { setBuildingId(Number(e.target.value)); setFlatId(''); setTenantId(''); }}>
+              <select className="input" value={buildingId} onChange={(e) => { setBuildingId(Number(e.target.value)); setFlatId(''); setResidentId(''); }}>
                 <option value="">Select building</option>
                 {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select></div>
             <div><label className="label">Flat / Apartment</label>
-              <select className="input" value={flatId} onChange={(e) => { setFlatId(Number(e.target.value)); setTenantId(''); }} disabled={!buildingId}>
+              <select className="input" value={flatId} onChange={(e) => { setFlatId(Number(e.target.value)); setResidentId(''); }} disabled={!buildingId}>
                 <option value="">Select flat</option>
                 {buildingFlats.map((f) => <option key={f.id} value={f.id}>{f.unitNo}</option>)}
               </select></div>
           </div>
-          <div><label className="label">Tenant</label>
-            <select className="input" value={tenantId} onChange={(e) => setTenantId(Number(e.target.value))} disabled={!flatId}>
-              <option value="">Select tenant</option>
-              {flatTenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          <div><label className="label">Resident (Tenant / Flat Owner)</label>
+            <select className="input" value={residentId} onChange={(e) => setResidentId(Number(e.target.value))} disabled={!flatId}>
+              <option value="">Select resident</option>
+              {flatResidents.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.type === 'Owner' ? 'Flat Owner' : 'Tenant'})</option>)}
             </select></div>
 
           <h3 className="font-semibold text-gray-800 pt-2">2. Billing Period</h3>
@@ -171,32 +200,50 @@ export default function BillGenerator() {
           <h3 className="font-semibold text-gray-800">3. Meter Readings</h3>
           <div className="grid grid-cols-3 gap-3">
             <div><label className="label">Previous (Unit)</label>
-              <input type="number" className="input" value={prevReading} onChange={(e) => setPrevReading(Number(e.target.value))} /></div>
+              <input type="number" className="input" value={prevReading || ''} placeholder="0" onChange={(e) => setPrevReading(Number(e.target.value))} /></div>
             <div><label className="label">Current Reading</label>
-              <input type="number" className="input" value={currReading} onChange={(e) => setCurrReading(Number(e.target.value))} /></div>
+              <input type="number" className="input" value={currReading || ''} placeholder="0" onChange={(e) => setCurrReading(Number(e.target.value))} /></div>
             <div><label className="label">Rate per Unit (৳)</label>
-              <input type="number" className="input" value={rate} onChange={(e) => setRate(Number(e.target.value))} /></div>
+              <input type="number" className="input" value={rate || ''} placeholder="0" onChange={(e) => setRate(Number(e.target.value))} /></div>
           </div>
           <div className="text-sm text-gray-500">Units used: <b className="text-gray-800">{units}</b> · Electricity: <b className="text-gray-800">{money(electricityAmount)}</b></div>
         </div>
 
         <div className="card p-5 space-y-3">
-          <h3 className="font-semibold text-gray-800">4. Charges</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-gray-800">4. Charges</h3>
+            <button onClick={addCustomCharge} className="text-brand-500 text-sm font-medium flex items-center gap-1 hover:underline">
+              <Plus size={14} /> Add Charge
+            </button>
+          </div>
+          <div className="space-y-2">
             {charges.map((c, i) => (
-              <div key={c.label}>
-                <label className="label">{c.label}</label>
-                <input type="number" className="input" value={c.amount} onChange={(e) => updateCharge(i, Number(e.target.value))} />
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  className="input flex-1"
+                  value={c.label}
+                  placeholder={defaultChargeLabels[i] ?? 'Charge label'}
+                  onChange={(e) => updateChargeLabel(i, e.target.value)}
+                />
+                <input
+                  type="number"
+                  className="input w-28"
+                  value={c.amount || ''}
+                  placeholder="0"
+                  onChange={(e) => updateChargeAmount(i, Number(e.target.value))}
+                />
+                <button onClick={() => removeCharge(i)} className="text-red-400 hover:text-red-600 shrink-0"><Trash2 size={16} /></button>
               </div>
             ))}
+            {charges.length === 0 && <div className="text-xs text-gray-400">No charges added yet — click "Add Charge".</div>}
           </div>
           <div className="grid grid-cols-3 gap-3 pt-2">
             <div><label className="label">Previous Balance</label>
-              <input type="number" className="input" value={previousBalance} onChange={(e) => setPreviousBalance(Number(e.target.value))} /></div>
+              <input type="number" className="input" value={previousBalance || ''} placeholder="0" onChange={(e) => setPreviousBalance(Number(e.target.value))} /></div>
             <div><label className="label">Discount</label>
-              <input type="number" className="input" value={discount} onChange={(e) => setDiscount(Number(e.target.value))} /></div>
+              <input type="number" className="input" value={discount || ''} placeholder="0" onChange={(e) => setDiscount(Number(e.target.value))} /></div>
             <div><label className="label">Penalty / Late Fee</label>
-              <input type="number" className="input" value={penalty} onChange={(e) => setPenalty(Number(e.target.value))} /></div>
+              <input type="number" className="input" value={penalty || ''} placeholder="0" onChange={(e) => setPenalty(Number(e.target.value))} /></div>
           </div>
         </div>
 
@@ -204,7 +251,7 @@ export default function BillGenerator() {
           <h3 className="font-semibold text-gray-800 mb-2">5. Summary</h3>
           <div className="space-y-1 text-sm text-gray-600">
             <div className="flex justify-between"><span>Electricity ({units} Units)</span><span>{money(electricityAmount)}</span></div>
-            {charges.map((c) => <div key={c.label} className="flex justify-between"><span>{c.label}</span><span>{money(c.amount)}</span></div>)}
+            {charges.map((c, i) => <div key={i} className="flex justify-between"><span>{c.label || '—'}</span><span>{money(c.amount)}</span></div>)}
             <div className="flex justify-between"><span>Previous Balance</span><span>{money(previousBalance)}</span></div>
             <div className="flex justify-between"><span>Discount</span><span>-{money(discount)}</span></div>
             <div className="flex justify-between"><span>Penalty / Late Fee</span><span>{money(penalty)}</span></div>
@@ -271,9 +318,9 @@ export default function BillGenerator() {
 
                 <div className="border-t border-gray-100 pt-3 mb-3 text-sm">
                   <div className="text-gray-400 text-xs mb-1">Billed To</div>
-                  <div className="font-medium text-gray-800">{tenant?.name}</div>
+                  <div className="font-medium text-gray-800">{resident?.name} <span className="text-xs text-gray-400 font-normal">({resident?.type === 'Owner' ? 'Flat Owner' : 'Tenant'})</span></div>
                   <div className="text-gray-500 text-xs">Flat {flat?.unitNo}, {building?.name}</div>
-                  <div className="text-gray-500 text-xs">{tenant?.mobile}</div>
+                  <div className="text-gray-500 text-xs">{resident?.mobile}</div>
                 </div>
 
                 <table className="w-full text-sm mb-3">
@@ -283,7 +330,7 @@ export default function BillGenerator() {
                   <tbody className="divide-y divide-gray-50">
                     <tr><td className="py-1.5">1</td><td>Electricity ({generatedBill.electricityUnits.current - generatedBill.electricityUnits.previous} Units × {generatedBill.electricityUnits.rate})</td><td className="text-right">{money(electricityAmount)}</td></tr>
                     {generatedBill.charges.map((c, i) => (
-                      <tr key={c.label}><td className="py-1.5">{i + 2}</td><td>{c.label}</td><td className="text-right">{money(c.amount)}</td></tr>
+                      <tr key={i}><td className="py-1.5">{i + 2}</td><td>{c.label}</td><td className="text-right">{money(c.amount)}</td></tr>
                     ))}
                   </tbody>
                 </table>

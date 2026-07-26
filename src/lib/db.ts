@@ -1,10 +1,10 @@
 import Dexie, { type Table } from 'dexie';
-import type { Building, Flat, Tenant, Bill, Receipt, Payment, CompanySettings } from '@/types';
+import type { Building, Flat, Resident, Bill, Receipt, Payment, CompanySettings } from '@/types';
 
 export class BuildingBillDB extends Dexie {
   buildings!: Table<Building, number>;
   flats!: Table<Flat, number>;
-  tenants!: Table<Tenant, number>;
+  residents!: Table<Resident, number>;
   bills!: Table<Bill, number>;
   receipts!: Table<Receipt, number>;
   payments!: Table<Payment, number>;
@@ -12,6 +12,8 @@ export class BuildingBillDB extends Dexie {
 
   constructor() {
     super('buildingbill-db');
+
+    // v1: original schema (kept only so upgrade() below can read old data safely)
     this.version(1).stores({
       buildings: '++id, name',
       flats: '++id, buildingId, unitNo, status',
@@ -21,12 +23,56 @@ export class BuildingBillDB extends Dexie {
       payments: '++id, invoiceId, tenantId, date',
       settings: '++id',
     });
+
+    // v2: "Tenants" renamed to "Residents" (with Tenant/Owner type). Existing
+    // local data is migrated automatically — nothing is lost on update.
+    this.version(2)
+      .stores({
+        buildings: '++id, name',
+        flats: '++id, buildingId, unitNo, status',
+        tenants: null, // drop old store
+        residents: '++id, name, buildingId, flatId, type',
+        bills: '++id, invoiceNo, buildingId, flatId, residentId, status, billingMonth',
+        receipts: '++id, receiptNo, invoiceId, residentId',
+        payments: '++id, invoiceId, residentId, date',
+        settings: '++id',
+      })
+      .upgrade(async (tx) => {
+        const oldTenants = await tx.table('tenants').toArray();
+        if (oldTenants.length) {
+          await tx.table('residents').bulkAdd(
+            oldTenants.map((t: any) => ({
+              name: t.name,
+              mobile: t.mobile,
+              email: t.email,
+              flatId: t.flatId,
+              buildingId: t.buildingId,
+              unitLabel: t.unitLabel,
+              type: 'Tenant',
+            }))
+          );
+        }
+        await tx.table('bills').toCollection().modify((b: any) => {
+          b.residentId = b.tenantId;
+          delete b.tenantId;
+        });
+        await tx.table('receipts').toCollection().modify((r: any) => {
+          r.residentId = r.tenantId;
+          delete r.tenantId;
+        });
+        await tx.table('payments').toCollection().modify((p: any) => {
+          p.residentId = p.tenantId;
+          delete p.tenantId;
+        });
+      });
   }
 }
 
 export const db = new BuildingBillDB();
 
-// Seed with demo data matching the reference design, only on first run.
+// Seeds ONLY the structural demo data (buildings/flats/residents) so the app
+// isn't empty on first run. No invoices, receipts, or payments are seeded —
+// all billing data is created for real through the Bill Generator.
 export async function seedIfEmpty() {
   const count = await db.buildings.count();
   if (count > 0) return;
@@ -52,24 +98,24 @@ export async function seedIfEmpty() {
     { allKeys: true }
   );
 
-  const tenantDefs = [
-    { name: 'Aly Hasan', mobile: '01711-223344', email: 'aly.hasan@email.com', unitLabel: 'A-3', bId: greenTowerId, fIdx: 0 },
-    { name: 'Jannatul Ferdaus', mobile: '01822-334455', email: 'jannatul@email.com', unitLabel: 'B-2A', bId: greenTowerId, fIdx: 1 },
-    { name: 'Rony Ahmed', mobile: '01633-445566', email: 'rony@email.com', unitLabel: 'C-3C', bId: greenTowerId, fIdx: 2 },
-    { name: 'Sadia Islam', mobile: '01944-556677', email: 'sadia@email.com', unitLabel: 'A-1A', bId: roseGardenId, fIdx: 3 },
-    { name: 'Tanvir Hasan', mobile: '01764-778899', email: 'tanvir@email.com', unitLabel: 'A-2', bId: roseGardenId, fIdx: 4 },
+  const residentDefs: Array<{ name: string; mobile: string; email: string; unitLabel: string; bId: number; fIdx: number; type: 'Tenant' | 'Owner' }> = [
+    { name: 'Aly Hasan', mobile: '01711-223344', email: 'aly.hasan@email.com', unitLabel: 'A-3', bId: greenTowerId, fIdx: 0, type: 'Tenant' },
+    { name: 'Jannatul Ferdaus', mobile: '01822-334455', email: 'jannatul@email.com', unitLabel: 'B-2A', bId: greenTowerId, fIdx: 1, type: 'Owner' },
+    { name: 'Rony Ahmed', mobile: '01633-445566', email: 'rony@email.com', unitLabel: 'C-3C', bId: greenTowerId, fIdx: 2, type: 'Tenant' },
+    { name: 'Sadia Islam', mobile: '01944-556677', email: 'sadia@email.com', unitLabel: 'A-1A', bId: roseGardenId, fIdx: 3, type: 'Owner' },
+    { name: 'Tanvir Hasan', mobile: '01764-778899', email: 'tanvir@email.com', unitLabel: 'A-2', bId: roseGardenId, fIdx: 4, type: 'Tenant' },
   ];
 
-  const tenantIds = await db.tenants.bulkAdd(
-    tenantDefs.map((t) => ({
+  await db.residents.bulkAdd(
+    residentDefs.map((t) => ({
       name: t.name,
       mobile: t.mobile,
       email: t.email,
       flatId: (flatIds as number[])[t.fIdx],
       buildingId: t.bId,
       unitLabel: t.unitLabel,
-    })),
-    { allKeys: true }
+      type: t.type,
+    }))
   );
 
   await db.settings.add({
@@ -78,79 +124,13 @@ export async function seedIfEmpty() {
     phone: '01812-045678',
     email: 'greentower@gmail.com',
     defaultRates: {
-      electricityRate: 12.0,
-      waterCharge: 300,
-      gasCharge: 800,
-      liftCharge: 500,
-      securityCharge: 700,
-      cleaningCharge: 500,
-      internetCharge: 600,
+      electricityRate: 0,
+      waterCharge: 0,
+      gasCharge: 0,
+      liftCharge: 0,
+      securityCharge: 0,
+      cleaningCharge: 0,
+      internetCharge: 0,
     },
   });
-
-  // Seed a couple of bills/receipts/payments so Dashboard/Reports have data to show.
-  const invoiceDefs = [
-    { no: 'INV-2026-075', tIdx: 0, month: 'July 2026', total: 5020, status: 'unpaid' as const, paid: 0 },
-    { no: 'INV-2026-074', tIdx: 1, month: 'July 2026', total: 4800, status: 'paid' as const, paid: 4800 },
-    { no: 'INV-2026-073', tIdx: 2, month: 'July 2026', total: 2450, status: 'partial' as const, paid: 1000 },
-    { no: 'INV-2026-072', tIdx: 3, month: 'July 2026', total: 5100, status: 'paid' as const, paid: 5100 },
-  ];
-
-  for (const inv of invoiceDefs) {
-    const tenant = tenantDefs[inv.tIdx];
-    const tenantId = (tenantIds as number[])[inv.tIdx];
-    const flatId = (flatIds as number[])[inv.tIdx];
-    const billId = await db.bills.add({
-      invoiceNo: inv.no,
-      buildingId: tenant.bId,
-      flatId,
-      tenantId,
-      billingMonth: inv.month,
-      issueDate: '2026-07-20',
-      dueDate: '2026-08-10',
-      electricityUnits: { previous: 12350, current: 12465, rate: 12 },
-      charges: [
-        { label: 'Water Charge', amount: 300 },
-        { label: 'Gas Charge', amount: 800 },
-        { label: 'Lift Charge', amount: 500 },
-        { label: 'Security Charge', amount: 700 },
-        { label: 'Cleaning Charge', amount: 500 },
-        { label: 'Internet Charge', amount: 600 },
-      ] as import('@/types').ChargeLine[],
-      previousBalance: 500,
-      discount: 0,
-      penalty: 0,
-      subtotal: inv.total,
-      totalAmount: inv.total,
-      status: inv.status,
-      paidAmount: inv.paid,
-    });
-
-    if (inv.paid > 0) {
-      await db.receipts.add({
-        receiptNo: `RCPT-2026-00${41 - inv.tIdx}`,
-        invoiceId: billId as number,
-        tenantId,
-        buildingId: tenant.bId,
-        flatId,
-        date: '2026-07-20',
-        amountReceived: inv.paid,
-        previousBalance: 500,
-        totalPayable: inv.total + 500,
-        remainingBalance: inv.total + 500 - inv.paid,
-        method: 'Cash',
-        receivedBy: 'Manager',
-      });
-      await db.payments.add({
-        date: '2026-07-20',
-        invoiceId: billId as number,
-        tenantId,
-        buildingId: tenant.bId,
-        flatId,
-        method: 'Cash',
-        amount: inv.paid,
-        type: inv.status === 'paid' ? 'Full' : 'Partial',
-      });
-    }
-  }
 }

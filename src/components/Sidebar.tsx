@@ -1,16 +1,17 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Home, Users, Receipt, FileText,
-  FilePlus2, History, CreditCard, BarChart3, Settings, DatabaseBackup,
-  ChevronDown, X,
+  History, CreditCard, BarChart3, Settings, DatabaseBackup,
+  ChevronDown, X, HelpCircle,
 } from 'lucide-react';
 import { useState } from 'react';
+import StorageStatus from './StorageStatus';
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/buildings', label: 'Buildings', icon: Building2 },
   { to: '/flats', label: 'Flats', icon: Home },
-  { to: '/tenants', label: 'Tenants', icon: Users },
+  { to: '/residents', label: 'Residents', icon: Users },
 ];
 
 const billingNav = [
@@ -23,6 +24,7 @@ const bottomNav = [
   { to: '/reports', label: 'Reports', icon: BarChart3 },
   { to: '/settings', label: 'Settings', icon: Settings },
   { to: '/backup', label: 'Backup & Restore', icon: DatabaseBackup },
+  { to: '/help', label: 'Help', icon: HelpCircle },
 ];
 
 function Item({ to, label, icon: Icon, end }: { to: string; label: string; icon: any; end?: boolean }) {
@@ -86,10 +88,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
           </div>
         </nav>
 
-        <div className="p-4 text-xs text-gray-400 border-t border-white/10">
-          <div className="font-medium text-gray-200 mb-1">Data stored locally</div>
-          Backup regularly from <span className="text-brand-100">Backup & Restore</span>.
-        </div>
+        <StorageStatus />
       </aside>
     </>
   );
