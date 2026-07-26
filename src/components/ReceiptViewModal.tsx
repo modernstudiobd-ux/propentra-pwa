@@ -1,3 +1,5 @@
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/lib/db';
 import { X, Printer, Landmark } from 'lucide-react';
 import { money, dateLabel, numberToWords } from '@/lib/format';
 import type { Receipt, Building, Flat, Resident } from '@/types';
@@ -5,6 +7,7 @@ import type { Receipt, Building, Flat, Resident } from '@/types';
 export default function ReceiptViewModal({
   receipt, building, flat, resident, onClose,
 }: { receipt: Receipt; building?: Building; flat?: Flat; resident?: Resident; onClose: () => void }) {
+  const settings = useLiveQuery(() => db.settings.toCollection().first(), []);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 modal-backdrop">
       <div className="bg-white rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
@@ -57,7 +60,10 @@ export default function ReceiptViewModal({
 
           <div className="text-xs text-gray-400 mt-6 pt-3 border-t border-gray-100 flex justify-between items-end">
             <span>Thank you for your payment!</span>
-            <span>Received by: {receipt.receivedBy}</span>
+            <span className="text-right flex flex-col items-end">
+              {settings?.signatureImage && <img src={settings.signatureImage} className="h-10 object-contain mb-1" />}
+              Received by: {receipt.receivedBy}
+            </span>
           </div>
         </div>
       </div>

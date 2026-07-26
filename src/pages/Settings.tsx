@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import type { CompanySettings } from '@/types';
-import { Building2, SlidersHorizontal, FileText, Receipt, Wallet, CreditCard, DatabaseBackup } from 'lucide-react';
+import { Building2, SlidersHorizontal, FileText, Receipt, Wallet, CreditCard, DatabaseBackup, PenTool, Trash2 } from 'lucide-react';
+import Modal from '@/components/Modal';
+import SignaturePad from '@/components/SignaturePad';
 
 const sections = [
   { key: 'company', label: 'Company Info', icon: Building2 },
@@ -18,6 +20,7 @@ export default function SettingsPage() {
   const settings = useLiveQuery(() => db.settings.toCollection().first(), []);
   const [section, setSection] = useState<typeof sections[number]['key']>('company');
   const [form, setForm] = useState<CompanySettings | null>(null);
+  const [signaturePadOpen, setSignaturePadOpen] = useState(false);
 
   useEffect(() => { if (settings) setForm(settings); }, [settings?.id]);
 
@@ -33,6 +36,20 @@ export default function SettingsPage() {
     const reader = new FileReader();
     reader.onload = () => setForm({ ...form, logo: reader.result as string });
     reader.readAsDataURL(file);
+  }
+
+  function onSignatureUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !form) return;
+    const reader = new FileReader();
+    reader.onload = () => setForm({ ...form, signatureImage: reader.result as string });
+    reader.readAsDataURL(file);
+  }
+
+  function onSignatureDrawn(dataUrl: string) {
+    if (!form) return;
+    setForm({ ...form, signatureImage: dataUrl });
+    setSignaturePadOpen(false);
   }
 
   if (!form) return null;
@@ -100,6 +117,31 @@ export default function SettingsPage() {
               <textarea className="input" rows={2} value={form.invoiceNotes ?? ''}
                 onChange={(e) => setForm({ ...form, invoiceNotes: e.target.value })} />
             </div>
+            <div>
+              <label className="label">Authorized Signature</label>
+              <div className="flex items-center gap-3">
+                <div className="w-28 h-16 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center overflow-hidden">
+                  {form.signatureImage ? <img src={form.signatureImage} className="w-full h-full object-contain" /> : <PenTool className="text-gray-300" size={20} />}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <label className="btn-secondary cursor-pointer text-xs">
+                      Upload Image
+                      <input type="file" accept="image/*" className="hidden" onChange={onSignatureUpload} />
+                    </label>
+                    <button onClick={() => setSignaturePadOpen(true)} className="btn-secondary text-xs flex items-center gap-1">
+                      <PenTool size={13} /> Draw
+                    </button>
+                    {form.signatureImage && (
+                      <button onClick={() => setForm({ ...form, signatureImage: '' })} className="text-red-400 hover:text-red-600 text-xs flex items-center gap-1">
+                        <Trash2 size={13} /> Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-gray-400">Printed above "Authorized Signature" on every invoice. Use a transparent PNG for best results.</div>
+                </div>
+              </div>
+            </div>
             <button onClick={save} className="btn-primary">Save Changes</button>
           </div>
         )}
@@ -124,6 +166,10 @@ export default function SettingsPage() {
           <div className="text-sm text-gray-400 py-10 text-center">This section can be customized further as your needs grow.</div>
         )}
       </div>
+
+      <Modal open={signaturePadOpen} onClose={() => setSignaturePadOpen(false)} title="Draw Signature">
+        <SignaturePad onSave={onSignatureDrawn} onCancel={() => setSignaturePadOpen(false)} />
+      </Modal>
     </div>
   );
 }

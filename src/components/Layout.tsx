@@ -8,7 +8,7 @@ const titles: Record<string, string> = {
   '/buildings': 'Buildings',
   '/flats': 'Flats',
   '/residents': 'Residents',
-  '/billing/generator': 'Bill Generator',
+  '/billing/generator': 'Billing Center',
   '/billing/history': 'Bills History',
   '/billing/payments': 'Payments',
   '/reports': 'Reports',

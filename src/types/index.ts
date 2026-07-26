@@ -88,6 +88,7 @@ export interface CompanySettings {
   phone: string;
   email: string;
   logo?: string; // base64
+  signatureImage?: string; // base64 - uploaded or drawn authorized signature
   taxId?: string; // VAT/TIN/BIN registration number, shown on invoices if set
   defaultTaxRate?: number; // % VAT/tax applied to bills by default
   bankDetails?: string; // payment instructions (bank/mobile banking) shown on invoices

@@ -15,7 +15,7 @@ const nav = [
 ];
 
 const billingNav = [
-  { to: '/billing/generator', label: 'Bill Generator', icon: FileText },
+  { to: '/billing/generator', label: 'Billing Center', icon: FileText },
   { to: '/billing/history', label: 'Bills History', icon: History },
 ];
 

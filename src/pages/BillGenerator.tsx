@@ -427,7 +427,10 @@ function BillGeneratorForm() {
 
                 <div className="flex justify-between items-end text-xs text-gray-400 mt-4 pt-3 border-t border-gray-100">
                   <span>{settings?.invoiceNotes || 'Please make payment by the due date. Thank you for your cooperation.'}</span>
-                  <span className="text-right shrink-0 ml-4">Authorized Signature<br />______________</span>
+                  <span className="text-right shrink-0 ml-4 flex flex-col items-end">
+                    {settings?.signatureImage && <img src={settings.signatureImage} className="h-10 object-contain mb-1" />}
+                    <span>Authorized Signature<br />______________</span>
+                  </span>
                 </div>
               </>
             )}
