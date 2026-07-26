@@ -1,10 +1,13 @@
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/lib/db';
 import { X, Printer, Landmark } from 'lucide-react';
-import { money, dateLabel } from '@/lib/format';
+import { money, dateLabel, numberToWords } from '@/lib/format';
 import type { Bill, Building, Flat, Resident } from '@/types';
 
 export default function InvoiceViewModal({
   bill, building, flat, resident, onClose,
 }: { bill: Bill; building?: Building; flat?: Flat; resident?: Resident; onClose: () => void }) {
+  const settings = useLiveQuery(() => db.settings.toCollection().first(), []);
   const electricityAmount = (bill.electricityUnits.current - bill.electricityUnits.previous) * bill.electricityUnits.rate;
 
   return (
@@ -29,9 +32,13 @@ export default function InvoiceViewModal({
               <div>
                 <div className="font-semibold text-gray-800">{building?.name}</div>
                 <div className="text-xs text-gray-400 max-w-[220px]">{building?.address}</div>
+                {settings?.taxId && <div className="text-xs text-gray-400">Tax ID / BIN: {settings.taxId}</div>}
               </div>
             </div>
-            <span className="bg-brand-50 text-brand-700 px-3 py-1 rounded-full text-xs font-semibold">INVOICE</span>
+            <div className="text-right">
+              <span className="bg-brand-50 text-brand-700 px-3 py-1 rounded-full text-xs font-semibold">INVOICE</span>
+              <div className="text-[10px] text-gray-400 mt-1">Currency: BDT (৳)</div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4 text-sm mb-4">
@@ -45,25 +52,33 @@ export default function InvoiceViewModal({
             <div className="text-gray-400 text-xs mb-1">Billed To</div>
             <div className="font-medium text-gray-800">{resident?.name} <span className="text-xs text-gray-400 font-normal">({resident?.type === 'Owner' ? 'Flat Owner' : 'Tenant'})</span></div>
             <div className="text-gray-500 text-xs">Flat {flat?.unitNo}, {building?.name}</div>
-            <div className="text-gray-500 text-xs">{resident?.mobile}</div>
+            {resident?.mobile && <div className="text-gray-500 text-xs">{resident.mobile}</div>}
           </div>
 
           <table className="w-full text-sm mb-3">
             <thead><tr className="text-left text-xs text-gray-400 border-b border-gray-100">
-              <th className="py-2">#</th><th>Particulars</th><th className="text-right">Amount (৳)</th>
+              <th className="py-2">#</th><th>Description</th><th className="text-right">Qty</th>
+              <th className="text-right">Unit Price (৳)</th><th className="text-right">Amount (৳)</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {(() => {
-                const lines: { label: string; amount: number }[] = [];
+                const lines: { label: string; qty: number; unitPrice: number; amount: number }[] = [];
                 if (electricityAmount > 0) {
                   lines.push({
-                    label: `Electricity (${bill.electricityUnits.current - bill.electricityUnits.previous} Units × ${bill.electricityUnits.rate})`,
+                    label: 'Electricity',
+                    qty: bill.electricityUnits.current - bill.electricityUnits.previous,
+                    unitPrice: bill.electricityUnits.rate,
                     amount: electricityAmount,
                   });
                 }
-                bill.charges.filter((c) => c.amount > 0).forEach((c) => lines.push({ label: c.label, amount: c.amount }));
+                bill.charges.filter((c) => c.amount > 0).forEach((c) => lines.push({ label: c.label, qty: 1, unitPrice: c.amount, amount: c.amount }));
                 return lines.map((l, i) => (
-                  <tr key={i}><td className="py-1.5">{i + 1}</td><td>{l.label}</td><td className="text-right">{money(l.amount)}</td></tr>
+                  <tr key={i}>
+                    <td className="py-1.5">{i + 1}</td><td>{l.label}</td>
+                    <td className="text-right">{l.qty}</td>
+                    <td className="text-right">{money(l.unitPrice)}</td>
+                    <td className="text-right">{money(l.amount)}</td>
+                  </tr>
                 ));
               })()}
             </tbody>
@@ -71,8 +86,9 @@ export default function InvoiceViewModal({
 
           <div className="space-y-1 text-sm border-t border-gray-100 pt-2">
             <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>{money(bill.subtotal)}</span></div>
-            {bill.previousBalance > 0 && <div className="flex justify-between"><span className="text-gray-500">Previous Balance</span><span>{money(bill.previousBalance)}</span></div>}
             {bill.discount > 0 && <div className="flex justify-between"><span className="text-gray-500">Discount</span><span>-{money(bill.discount)}</span></div>}
+            {bill.taxAmount > 0 && <div className="flex justify-between"><span className="text-gray-500">Tax / VAT ({bill.taxRate}%)</span><span>{money(bill.taxAmount)}</span></div>}
+            {bill.previousBalance > 0 && <div className="flex justify-between"><span className="text-gray-500">Previous Balance</span><span>{money(bill.previousBalance)}</span></div>}
             {bill.penalty > 0 && <div className="flex justify-between"><span className="text-gray-500">Penalty / Late Fee</span><span>{money(bill.penalty)}</span></div>}
           </div>
 
@@ -80,11 +96,24 @@ export default function InvoiceViewModal({
             <span className="font-semibold text-gray-800">Total Amount Due</span>
             <span className="text-lg font-bold text-brand-700">{money(bill.totalAmount)}</span>
           </div>
+          <div className="text-xs text-gray-400 mt-1">Amount in words: {numberToWords(bill.totalAmount)}</div>
           {bill.paidAmount > 0 && (
             <div className="flex justify-between text-sm text-emerald-600 pt-1">
               <span>Paid</span><span>{money(bill.paidAmount)}</span>
             </div>
           )}
+
+          {settings?.bankDetails && (
+            <div className="text-xs text-gray-600 mt-4 pt-3 border-t border-gray-100 whitespace-pre-line">
+              <div className="font-medium text-gray-700 mb-1">Payment Instructions</div>
+              {settings.bankDetails}
+            </div>
+          )}
+
+          <div className="flex justify-between items-end text-xs text-gray-400 mt-4 pt-3 border-t border-gray-100">
+            <span>{settings?.invoiceNotes || 'Please make payment by the due date. Thank you for your cooperation.'}</span>
+            <span className="text-right shrink-0 ml-4">Authorized Signature<br />______________</span>
+          </div>
         </div>
       </div>
     </div>

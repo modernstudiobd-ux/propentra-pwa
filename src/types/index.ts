@@ -44,6 +44,8 @@ export interface Bill {
   charges: ChargeLine[]; // fully user-editable: water, gas, lift, security, cleaning, internet, custom...
   previousBalance: number;
   discount: number;
+  taxRate: number; // % VAT/tax applied to (line items - discount)
+  taxAmount: number;
   penalty: number;
   subtotal: number;
   totalAmount: number;
@@ -86,6 +88,10 @@ export interface CompanySettings {
   phone: string;
   email: string;
   logo?: string; // base64
+  taxId?: string; // VAT/TIN/BIN registration number, shown on invoices if set
+  defaultTaxRate?: number; // % VAT/tax applied to bills by default
+  bankDetails?: string; // payment instructions (bank/mobile banking) shown on invoices
+  invoiceNotes?: string; // footer terms/notes shown on invoices
   defaultRates: {
     electricityRate: number;
     waterCharge: number;

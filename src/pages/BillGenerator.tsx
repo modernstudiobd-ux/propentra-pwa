@@ -65,6 +65,7 @@ function BillGeneratorForm() {
   const [ratesInitialized, setRatesInitialized] = useState(false);
   const [previousBalance, setPreviousBalance] = useState(0);
   const [discount, setDiscount] = useState(0);
+  const [taxRate, setTaxRate] = useState(0);
   const [penalty, setPenalty] = useState(0);
 
   // Pull defaults from Settings (configured by the user) exactly once, instead
@@ -72,6 +73,7 @@ function BillGeneratorForm() {
   useEffect(() => {
     if (settings && !ratesInitialized) {
       setRate(settings.defaultRates.electricityRate);
+      setTaxRate(settings.defaultTaxRate ?? 0);
       setCharges([
         { label: 'Water Charge', amount: settings.defaultRates.waterCharge },
         { label: 'Gas Charge', amount: settings.defaultRates.gasCharge },
@@ -102,8 +104,10 @@ function BillGeneratorForm() {
   const units = Math.max(0, currReading - prevReading);
   const electricityAmount = units * rate;
   const chargesTotal = charges.reduce((s, c) => s + c.amount, 0);
-  const subtotal = electricityAmount + chargesTotal + previousBalance;
-  const totalAmount = Math.max(0, subtotal - discount + penalty);
+  const subtotal = electricityAmount + chargesTotal; // itemized lines only, before discount/tax
+  const afterDiscount = Math.max(0, subtotal - discount);
+  const taxAmount = afterDiscount * (taxRate / 100);
+  const totalAmount = Math.max(0, afterDiscount + taxAmount + previousBalance + penalty);
 
   function updateChargeAmount(idx: number, amount: number) {
     setCharges((prev) => prev.map((c, i) => (i === idx ? { ...c, amount } : c)));
@@ -123,6 +127,7 @@ function BillGeneratorForm() {
     setPrevReading(0); setCurrReading(0);
     setCharges(charges.map((c) => ({ ...c, amount: 0 })));
     setPreviousBalance(0); setDiscount(0); setPenalty(0);
+    setTaxRate(settings?.defaultTaxRate ?? 0);
     setGeneratedBill(null);
     setLastReceipt(null);
   }
@@ -142,6 +147,8 @@ function BillGeneratorForm() {
       charges,
       previousBalance,
       discount,
+      taxRate,
+      taxAmount,
       penalty,
       subtotal,
       totalAmount,
@@ -249,11 +256,13 @@ function BillGeneratorForm() {
             {charges.length === 0 && <div className="text-xs text-gray-400">No charges added yet — click "Add Charge".</div>}
           </div>
           <div className="text-xs text-gray-400">Charges left at 0 are automatically excluded from the invoice.</div>
-          <div className="grid grid-cols-3 gap-3 pt-2">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
             <div><label className="label">Previous Balance</label>
               <input type="number" className="input" value={previousBalance || ''} placeholder="0" onChange={(e) => setPreviousBalance(Number(e.target.value))} /></div>
             <div><label className="label">Discount</label>
               <input type="number" className="input" value={discount || ''} placeholder="0" onChange={(e) => setDiscount(Number(e.target.value))} /></div>
+            <div><label className="label">Tax / VAT (%)</label>
+              <input type="number" className="input" value={taxRate || ''} placeholder="0" onChange={(e) => setTaxRate(Number(e.target.value))} /></div>
             <div><label className="label">Penalty / Late Fee</label>
               <input type="number" className="input" value={penalty || ''} placeholder="0" onChange={(e) => setPenalty(Number(e.target.value))} /></div>
           </div>
@@ -270,6 +279,7 @@ function BillGeneratorForm() {
             ))}
             {previousBalance > 0 && <div className="flex justify-between"><span>Previous Balance</span><span>{money(previousBalance)}</span></div>}
             {discount > 0 && <div className="flex justify-between"><span>Discount</span><span>-{money(discount)}</span></div>}
+            {taxAmount > 0 && <div className="flex justify-between"><span>Tax / VAT ({taxRate}%)</span><span>{money(taxAmount)}</span></div>}
             {penalty > 0 && <div className="flex justify-between"><span>Penalty / Late Fee</span><span>{money(penalty)}</span></div>}
             {electricityAmount === 0 && chargesTotal === 0 && previousBalance === 0 && discount === 0 && penalty === 0 && (
               <div className="text-gray-400 text-xs py-2">Enter meter readings or charges above to build the invoice.</div>
@@ -330,9 +340,13 @@ function BillGeneratorForm() {
                     <div>
                       <div className="font-semibold text-gray-800">{building?.name}</div>
                       <div className="text-xs text-gray-400 max-w-[220px]">{building?.address}</div>
+                      {settings?.taxId && <div className="text-xs text-gray-400">Tax ID / BIN: {settings.taxId}</div>}
                     </div>
                   </div>
-                  <span className="bg-brand-50 text-brand-700 px-3 py-1 rounded-full text-xs font-semibold">INVOICE</span>
+                  <div className="text-right">
+                    <span className="bg-brand-50 text-brand-700 px-3 py-1 rounded-full text-xs font-semibold">INVOICE</span>
+                    <div className="text-[10px] text-gray-400 mt-1">Currency: BDT (৳)</div>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 text-sm mb-4">
@@ -363,20 +377,28 @@ function BillGeneratorForm() {
 
                 <table className="w-full text-sm mb-3">
                   <thead><tr className="text-left text-xs text-gray-400 border-b border-gray-100">
-                    <th className="py-2">#</th><th>Particulars</th><th className="text-right">Amount (৳)</th>
+                    <th className="py-2">#</th><th>Description</th><th className="text-right">Qty</th>
+                    <th className="text-right">Unit Price (৳)</th><th className="text-right">Amount (৳)</th>
                   </tr></thead>
                   <tbody className="divide-y divide-gray-50">
                     {(() => {
-                      const lines: { label: string; amount: number }[] = [];
+                      const lines: { label: string; qty: number; unitPrice: number; amount: number }[] = [];
                       if (electricityAmount > 0) {
                         lines.push({
-                          label: `Electricity (${generatedBill.electricityUnits.current - generatedBill.electricityUnits.previous} Units × ${generatedBill.electricityUnits.rate})`,
+                          label: 'Electricity',
+                          qty: generatedBill.electricityUnits.current - generatedBill.electricityUnits.previous,
+                          unitPrice: generatedBill.electricityUnits.rate,
                           amount: electricityAmount,
                         });
                       }
-                      generatedBill.charges.filter((c) => c.amount > 0).forEach((c) => lines.push({ label: c.label, amount: c.amount }));
+                      generatedBill.charges.filter((c) => c.amount > 0).forEach((c) => lines.push({ label: c.label, qty: 1, unitPrice: c.amount, amount: c.amount }));
                       return lines.map((l, i) => (
-                        <tr key={i}><td className="py-1.5">{i + 1}</td><td>{l.label}</td><td className="text-right">{money(l.amount)}</td></tr>
+                        <tr key={i}>
+                          <td className="py-1.5">{i + 1}</td><td>{l.label}</td>
+                          <td className="text-right">{l.qty}</td>
+                          <td className="text-right">{money(l.unitPrice)}</td>
+                          <td className="text-right">{money(l.amount)}</td>
+                        </tr>
                       ));
                     })()}
                   </tbody>
@@ -384,8 +406,9 @@ function BillGeneratorForm() {
 
                 <div className="space-y-1 text-sm border-t border-gray-100 pt-2">
                   <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span>{money(generatedBill.subtotal)}</span></div>
-                  {generatedBill.previousBalance > 0 && <div className="flex justify-between"><span className="text-gray-500">Previous Balance</span><span>{money(generatedBill.previousBalance)}</span></div>}
                   {generatedBill.discount > 0 && <div className="flex justify-between"><span className="text-gray-500">Discount</span><span>-{money(generatedBill.discount)}</span></div>}
+                  {generatedBill.taxAmount > 0 && <div className="flex justify-between"><span className="text-gray-500">Tax / VAT ({generatedBill.taxRate}%)</span><span>{money(generatedBill.taxAmount)}</span></div>}
+                  {generatedBill.previousBalance > 0 && <div className="flex justify-between"><span className="text-gray-500">Previous Balance</span><span>{money(generatedBill.previousBalance)}</span></div>}
                   {generatedBill.penalty > 0 && <div className="flex justify-between"><span className="text-gray-500">Penalty / Late Fee</span><span>{money(generatedBill.penalty)}</span></div>}
                 </div>
 
@@ -393,9 +416,18 @@ function BillGeneratorForm() {
                   <span className="font-semibold text-gray-800">Total Amount Due</span>
                   <span className="text-lg font-bold text-brand-700">{money(generatedBill.totalAmount)}</span>
                 </div>
+                <div className="text-xs text-gray-400 mt-1">Amount in words: {numberToWords(generatedBill.totalAmount)}</div>
 
-                <div className="text-xs text-gray-400 mt-4 pt-3 border-t border-gray-100">
-                  Please make payment by the due date. Thank you for your cooperation.
+                {settings?.bankDetails && (
+                  <div className="text-xs text-gray-600 mt-4 pt-3 border-t border-gray-100 whitespace-pre-line">
+                    <div className="font-medium text-gray-700 mb-1">Payment Instructions</div>
+                    {settings.bankDetails}
+                  </div>
+                )}
+
+                <div className="flex justify-between items-end text-xs text-gray-400 mt-4 pt-3 border-t border-gray-100">
+                  <span>{settings?.invoiceNotes || 'Please make payment by the due date. Thank you for your cooperation.'}</span>
+                  <span className="text-right shrink-0 ml-4">Authorized Signature<br />______________</span>
                 </div>
               </>
             )}

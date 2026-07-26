@@ -62,6 +62,10 @@ export default function SettingsPage() {
               <div><label className="label">Email</label>
                 <input className="input" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
             </div>
+            <div><label className="label">Tax ID / VAT / BIN (optional)</label>
+              <input className="input" value={form.taxId ?? ''} placeholder="e.g. BIN-000000000-0000" onChange={(e) => setForm({ ...form, taxId: e.target.value })} />
+              <div className="text-[11px] text-gray-400 mt-1">Shown on invoices under your company address if filled in.</div>
+            </div>
             <div>
               <label className="label">Logo</label>
               <div className="flex items-center gap-3">
@@ -74,6 +78,27 @@ export default function SettingsPage() {
                 </label>
               </div>
               <div className="text-[11px] text-gray-400 mt-1">JPG, PNG (Max 2MB)</div>
+            </div>
+            <button onClick={save} className="btn-primary">Save Changes</button>
+          </div>
+        )}
+
+        {section === 'invoice' && (
+          <div className="space-y-4 max-w-lg">
+            <h3 className="font-semibold text-gray-800">Invoice Settings</h3>
+            <div><label className="label">Default Tax / VAT Rate (%)</label>
+              <input type="number" className="input" value={form.defaultTaxRate ?? 0}
+                onChange={(e) => setForm({ ...form, defaultTaxRate: Number(e.target.value) })} />
+              <div className="text-[11px] text-gray-400 mt-1">Applied automatically in Bill Generator — you can still override it per invoice. Leave at 0 if you don't charge tax.</div>
+            </div>
+            <div><label className="label">Payment Instructions (Bank / Mobile Banking Details)</label>
+              <textarea className="input" rows={3} placeholder="e.g. Bank: XYZ Bank, A/C: 1234567890, Routing: 123456" value={form.bankDetails ?? ''}
+                onChange={(e) => setForm({ ...form, bankDetails: e.target.value })} />
+              <div className="text-[11px] text-gray-400 mt-1">Shown on every invoice so residents know how to pay.</div>
+            </div>
+            <div><label className="label">Invoice Footer / Terms Note</label>
+              <textarea className="input" rows={2} value={form.invoiceNotes ?? ''}
+                onChange={(e) => setForm({ ...form, invoiceNotes: e.target.value })} />
             </div>
             <button onClick={save} className="btn-primary">Save Changes</button>
           </div>
@@ -95,7 +120,7 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {!['company', 'charges'].includes(section) && (
+        {!['company', 'charges', 'invoice'].includes(section) && (
           <div className="text-sm text-gray-400 py-10 text-center">This section can be customized further as your needs grow.</div>
         )}
       </div>

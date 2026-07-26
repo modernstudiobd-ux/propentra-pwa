@@ -83,6 +83,10 @@ export async function seedIfEmpty() {
     address: '',
     phone: '',
     email: '',
+    taxId: '',
+    defaultTaxRate: 0,
+    bankDetails: '',
+    invoiceNotes: 'Please make payment by the due date. Thank you for your cooperation.',
     defaultRates: {
       electricityRate: 0,
       waterCharge: 0,
