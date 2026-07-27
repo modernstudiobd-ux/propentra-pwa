@@ -55,37 +55,60 @@ export default function Flats() {
         </button>
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full min-w-[600px]">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="table-th">#</th>
-              <th className="table-th">Unit No</th>
-              <th className="table-th">Building</th>
-              <th className="table-th">Status</th>
-              <th className="table-th text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {filtered.map((f, i) => (
-              <tr key={f.id}>
-                <td className="table-td">{i + 1}</td>
-                <td className="table-td font-medium text-gray-800">{f.unitNo}</td>
-                <td className="table-td">{buildingName(f.buildingId)}</td>
-                <td className="table-td">
-                  <span className={f.status === 'occupied' ? 'badge-paid' : 'badge-unpaid'}>{f.status}</span>
-                </td>
-                <td className="table-td text-right">
-                  <button onClick={() => openEdit(f)} className="text-brand-500 hover:text-brand-700 mr-3"><Pencil size={16} /></button>
-                  <button onClick={() => remove(f.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
-                </td>
+      <div className="card overflow-hidden">
+        <div className="hidden sm:block overflow-x-auto">
+          <table className="w-full min-w-[600px]">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="table-th">#</th>
+                <th className="table-th">Unit No</th>
+                <th className="table-th">Building</th>
+                <th className="table-th">Status</th>
+                <th className="table-th text-right">Action</th>
               </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={5} className="text-center text-sm text-gray-400 py-8">No flats found</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filtered.map((f, i) => (
+                <tr key={f.id}>
+                  <td className="table-td">{i + 1}</td>
+                  <td className="table-td font-medium text-gray-800">{f.unitNo}</td>
+                  <td className="table-td">{buildingName(f.buildingId)}</td>
+                  <td className="table-td">
+                    <span className={f.status === 'occupied' ? 'badge-paid' : 'badge-unpaid'}>{f.status}</span>
+                  </td>
+                  <td className="table-td text-right">
+                    <button onClick={() => openEdit(f)} className="icon-btn text-brand-500 mr-1"><Pencil size={16} /></button>
+                    <button onClick={() => remove(f.id)} className="icon-btn text-red-400"><Trash2 size={16} /></button>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={5} className="text-center text-sm text-gray-400 py-8">No flats found</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile card list */}
+        <div className="sm:hidden divide-y divide-gray-100">
+          {filtered.map((f) => (
+            <div key={f.id} className="p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-medium text-gray-800">{f.unitNo}</div>
+                <div className="text-sm text-gray-500">{buildingName(f.buildingId)}</div>
+                <span className={`inline-block mt-1 ${f.status === 'occupied' ? 'badge-paid' : 'badge-unpaid'}`}>{f.status}</span>
+              </div>
+              <div className="flex items-center shrink-0 gap-1">
+                <button onClick={() => openEdit(f)} className="icon-btn text-brand-500"><Pencil size={18} /></button>
+                <button onClick={() => remove(f.id)} className="icon-btn text-red-400"><Trash2 size={18} /></button>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && (
+            <div className="text-center text-sm text-gray-400 py-8">No flats found</div>
+          )}
+        </div>
+
         <div className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100">Total: {filtered.length} flats</div>
       </div>
 

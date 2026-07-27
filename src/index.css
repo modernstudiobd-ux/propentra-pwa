@@ -18,6 +18,18 @@
   .badge-paid { @apply bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md text-xs font-medium; }
   .badge-unpaid { @apply bg-red-50 text-red-500 px-2 py-1 rounded-md text-xs font-medium; }
   .badge-partial { @apply bg-amber-50 text-amber-600 px-2 py-1 rounded-md text-xs font-medium; }
+  /* Icon-only action buttons (Eye/Printer/Trash/Pencil) are too small a tap
+     target on their own — this pads them out to a ~40px touch target
+     (WCAG/mobile guidance) without changing their visual icon size. */
+  .icon-btn { @apply p-2 -m-2 rounded-lg inline-flex items-center justify-center active:bg-gray-100 transition-colors; }
+}
+
+/* Respect notches / home-indicator areas when this PWA runs standalone/fullscreen. */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
 }
 
 /* Printing now happens in an isolated iframe (see lib/printUtil.ts), which

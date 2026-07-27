@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel } from '@/lib/format';
-import { Search, Trash2, Eye, Printer } from 'lucide-react';
+import { Search, Trash2, Eye } from 'lucide-react';
 import InvoiceViewModal from '@/components/InvoiceViewModal';
 import type { Bill } from '@/types';
 
@@ -51,39 +51,64 @@ export default function BillsHistory() {
         </select>
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full min-w-[800px]">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="table-th">#</th><th className="table-th">Invoice</th><th className="table-th">Resident / Flat</th>
-              <th className="table-th">Month</th><th className="table-th">Total (৳)</th><th className="table-th">Status</th>
-              <th className="table-th">Due Date</th><th className="table-th text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {filtered.map((b, i) => (
-              <tr key={b.id}>
-                <td className="table-td">{i + 1}</td>
-                <td className="table-td font-medium text-gray-800">{b.invoiceNo}</td>
-                <td className="table-td">{residentName(b.residentId)} ({flatLabel(b.flatId)})</td>
-                <td className="table-td">{b.billingMonth}</td>
-                <td className="table-td">{money(b.totalAmount)}</td>
-                <td className="table-td">
+      <div className="card overflow-hidden">
+        <div className="hidden sm:block overflow-x-auto">
+          <table className="w-full min-w-[800px]">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="table-th">#</th><th className="table-th">Invoice</th><th className="table-th">Resident / Flat</th>
+                <th className="table-th">Month</th><th className="table-th">Total (৳)</th><th className="table-th">Status</th>
+                <th className="table-th">Due Date</th><th className="table-th text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filtered.map((b, i) => (
+                <tr key={b.id}>
+                  <td className="table-td">{i + 1}</td>
+                  <td className="table-td font-medium text-gray-800">{b.invoiceNo}</td>
+                  <td className="table-td">{residentName(b.residentId)} ({flatLabel(b.flatId)})</td>
+                  <td className="table-td">{b.billingMonth}</td>
+                  <td className="table-td">{money(b.totalAmount)}</td>
+                  <td className="table-td">
+                    <span className={b.status === 'paid' ? 'badge-paid' : b.status === 'partial' ? 'badge-partial' : 'badge-unpaid'}>
+                      {b.status[0].toUpperCase() + b.status.slice(1)}
+                    </span>
+                  </td>
+                  <td className="table-td">{dateLabel(b.dueDate)}</td>
+                  <td className="table-td text-right">
+                    <button onClick={() => setViewBill(b)} className="icon-btn text-brand-500 mr-1"><Eye size={16} /></button>
+                    <button onClick={() => remove(b.id)} className="icon-btn text-red-400"><Trash2 size={16} /></button>
+                  </td>
+                </tr>
+              ))}
+              {filtered.length === 0 && <tr><td colSpan={8} className="text-center text-sm text-gray-400 py-8">No invoices found</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile card list */}
+        <div className="sm:hidden divide-y divide-gray-100">
+          {filtered.map((b) => (
+            <div key={b.id} className="p-4 flex items-start justify-between gap-3">
+              <button onClick={() => setViewBill(b)} className="min-w-0 text-left flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium text-gray-800">{b.invoiceNo}</span>
                   <span className={b.status === 'paid' ? 'badge-paid' : b.status === 'partial' ? 'badge-partial' : 'badge-unpaid'}>
                     {b.status[0].toUpperCase() + b.status.slice(1)}
                   </span>
-                </td>
-                <td className="table-td">{dateLabel(b.dueDate)}</td>
-                <td className="table-td text-right">
-                  <button onClick={() => setViewBill(b)} className="text-brand-500 hover:text-brand-700 mr-3"><Eye size={16} /></button>
-                  <button onClick={() => setViewBill(b)} className="text-gray-400 hover:text-brand-600 mr-3"><Printer size={16} /></button>
-                  <button onClick={() => remove(b.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && <tr><td colSpan={8} className="text-center text-sm text-gray-400 py-8">No invoices found</td></tr>}
-          </tbody>
-        </table>
+                </div>
+                <div className="text-sm text-gray-500 mt-0.5">{residentName(b.residentId)} ({flatLabel(b.flatId)})</div>
+                <div className="text-xs text-gray-400 mt-1">{b.billingMonth} · Due {dateLabel(b.dueDate)}</div>
+              </button>
+              <div className="flex items-center shrink-0 gap-2">
+                <span className="font-semibold text-gray-800 text-sm">{money(b.totalAmount)}</span>
+                <button onClick={() => remove(b.id)} className="icon-btn text-red-400"><Trash2 size={18} /></button>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && <div className="text-center text-sm text-gray-400 py-8">No invoices found</div>}
+        </div>
+
         <div className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100">Total: {filtered.length} invoices</div>
       </div>
 

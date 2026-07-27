@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel } from '@/lib/format';
-import { Search, Eye, Printer, FileText } from 'lucide-react';
+import { Search, Eye, FileText } from 'lucide-react';
 import InvoiceViewModal from '@/components/InvoiceViewModal';
 import type { Bill } from '@/types';
 
@@ -60,8 +60,7 @@ export default function InvoiceGenerator() {
                   </span>
                 </td>
                 <td className="table-td text-right">
-                  <button onClick={() => setViewBill(b)} className="text-brand-500 hover:text-brand-700 mr-3"><Eye size={16} /></button>
-                  <button onClick={() => setViewBill(b)} className="text-gray-400 hover:text-brand-600"><Printer size={16} /></button>
+                  <button onClick={() => setViewBill(b)} className="icon-btn text-brand-500"><Eye size={16} /></button>
                 </td>
               </tr>
             ))}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import BottomNav from './BottomNav';
 
 const titles: Record<string, string> = {
   '/': 'Dashboard',
@@ -27,10 +28,11 @@ export default function Layout() {
       <Sidebar open={open} onClose={() => setOpen(false)} />
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar title={title} onMenu={() => setOpen(true)} />
-        <main className="flex-1 p-4 md:p-6 max-w-[1600px] w-full mx-auto">
+        <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6 max-w-[1600px] w-full mx-auto">
           <Outlet />
         </main>
       </div>
+      <BottomNav onMore={() => setOpen(true)} />
     </div>
   );
 }

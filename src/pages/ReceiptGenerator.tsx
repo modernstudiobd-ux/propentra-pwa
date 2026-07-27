@@ -60,29 +60,51 @@ export default function ReceiptGenerator() {
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search outstanding invoices..." className="input pl-9" />
         </div>
 
-        <div className="card overflow-x-auto max-h-[420px] overflow-y-auto">
-          <table className="w-full min-w-[500px]">
-            <thead className="bg-gray-50 sticky top-0">
-              <tr><th className="table-th">Invoice #</th><th className="table-th">Resident</th><th className="table-th">Due</th><th className="table-th text-right">Select</th></tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.map((b) => (
-                <tr key={b.id} className={selectedBillId === b.id ? 'bg-brand-50' : ''}>
-                  <td className="table-td font-medium text-gray-800">{b.invoiceNo}</td>
-                  <td className="table-td">{residentName(b.residentId)} ({flatLabel(b.flatId)})</td>
-                  <td className="table-td">{money(b.totalAmount - b.paidAmount)}</td>
-                  <td className="table-td text-right">
-                    <button onClick={() => selectBill(b)} className="btn-secondary text-xs">
-                      {selectedBillId === b.id ? 'Selected' : 'Select'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={4} className="text-center text-sm text-gray-400 py-8">No outstanding invoices found.</td></tr>
-              )}
-            </tbody>
-          </table>
+        <div className="card overflow-hidden max-h-[420px] overflow-y-auto">
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full min-w-[500px]">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr><th className="table-th">Invoice #</th><th className="table-th">Resident</th><th className="table-th">Due</th><th className="table-th text-right">Select</th></tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.map((b) => (
+                  <tr key={b.id} className={selectedBillId === b.id ? 'bg-brand-50' : ''}>
+                    <td className="table-td font-medium text-gray-800">{b.invoiceNo}</td>
+                    <td className="table-td">{residentName(b.residentId)} ({flatLabel(b.flatId)})</td>
+                    <td className="table-td">{money(b.totalAmount - b.paidAmount)}</td>
+                    <td className="table-td text-right">
+                      <button onClick={() => selectBill(b)} className="btn-secondary text-xs">
+                        {selectedBillId === b.id ? 'Selected' : 'Select'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={4} className="text-center text-sm text-gray-400 py-8">No outstanding invoices found.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile tappable list */}
+          <div className="sm:hidden divide-y divide-gray-100">
+            {filtered.map((b) => (
+              <button
+                key={b.id}
+                onClick={() => selectBill(b)}
+                className={`w-full text-left p-4 flex items-center justify-between gap-3 ${selectedBillId === b.id ? 'bg-brand-50' : ''}`}
+              >
+                <div className="min-w-0">
+                  <div className="font-medium text-gray-800">{b.invoiceNo}</div>
+                  <div className="text-sm text-gray-500">{residentName(b.residentId)} ({flatLabel(b.flatId)})</div>
+                </div>
+                <span className="text-sm font-semibold text-gray-800 shrink-0">{money(b.totalAmount - b.paidAmount)}</span>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="text-center text-sm text-gray-400 py-8">No outstanding invoices found.</div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -127,7 +149,7 @@ export default function ReceiptGenerator() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-semibold text-gray-800">{money(r.amountReceived)}</span>
-                  <button onClick={() => setViewReceipt(r)} className="text-gray-400 hover:text-brand-600"><Eye size={16} /></button>
+                  <button onClick={() => setViewReceipt(r)} className="icon-btn text-gray-400 hover:text-brand-600"><Eye size={16} /></button>
                 </div>
               </div>
             ))}

@@ -204,7 +204,7 @@ function BillGeneratorForm() {
             </select></div>
 
           <h3 className="font-semibold text-gray-800 pt-2">2. Billing Period</h3>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div><label className="label">Month</label>
               <input className="input" value={month} onChange={(e) => setMonth(e.target.value)} /></div>
             <div><label className="label">Issue Date</label>
@@ -216,7 +216,7 @@ function BillGeneratorForm() {
 
         <div className="card p-5 space-y-3">
           <h3 className="font-semibold text-gray-800">3. Meter Readings</h3>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <div><label className="label">Previous (Unit)</label>
               <input type="number" className="input" value={prevReading || ''} placeholder="0" onChange={(e) => setPrevReading(Number(e.target.value))} /></div>
             <div><label className="label">Current Reading</label>
@@ -238,21 +238,21 @@ function BillGeneratorForm() {
           </div>
           <div className="space-y-2">
             {charges.map((c, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className="flex flex-wrap items-center gap-2">
                 <input
-                  className="input flex-1"
+                  className="input flex-1 min-w-[140px]"
                   value={c.label}
                   placeholder={defaultChargeLabels[i] ?? 'Charge label'}
                   onChange={(e) => updateChargeLabel(i, e.target.value)}
                 />
                 <input
                   type="number"
-                  className="input w-28"
+                  className="input w-24 sm:w-28"
                   value={c.amount || ''}
                   placeholder="0"
                   onChange={(e) => updateChargeAmount(i, Number(e.target.value))}
                 />
-                <button onClick={() => removeCharge(i)} className="text-red-400 hover:text-red-600 shrink-0"><Trash2 size={16} /></button>
+                <button onClick={() => removeCharge(i)} className="icon-btn text-red-400 shrink-0"><Trash2 size={16} /></button>
               </div>
             ))}
             {charges.length === 0 && <div className="text-xs text-gray-400">No charges added yet — click "Add Charge".</div>}

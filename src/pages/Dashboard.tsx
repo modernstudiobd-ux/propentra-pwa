@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel } from '@/lib/format';
 import {
-  Building2, Home, Users, FileWarning, Wallet, Eye, Printer,
+  Building2, Home, Users, FileWarning, Wallet, Eye,
   FileText, Receipt, UserPlus, Layers, Plus, ChevronDown,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
@@ -158,8 +158,7 @@ export default function Dashboard() {
                         </span>
                       </td>
                       <td className="py-2.5 text-right">
-                        <button onClick={() => setViewBill(b)} className="text-gray-400 hover:text-brand-600 mr-2"><Eye size={16} /></button>
-                        <button onClick={() => setViewBill(b)} className="text-gray-400 hover:text-brand-600"><Printer size={16} /></button>
+                        <button onClick={() => setViewBill(b)} className="icon-btn text-gray-400 hover:text-brand-600"><Eye size={16} /></button>
                       </td>
                     </tr>
                   ))}

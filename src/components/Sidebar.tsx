@@ -53,7 +53,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
   return (
     <>
       {open && (
-        <div className="fixed inset-0 bg-black/40 z-30 md:hidden" onClick={onClose} />
+        <div className="fixed inset-0 bg-black/40 z-40 md:hidden" onClick={onClose} />
       )}
       <aside
         className={`fixed md:sticky top-0 z-40 h-screen w-64 bg-brand-900 text-white flex flex-col transition-transform duration-200
