@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel, numberToWords } from '@/lib/format';
 import { genInvoiceNo, recordPaymentForBill } from '@/lib/billing';
 import { buildInvoiceMessage, buildReceiptMessage, whatsappLink, smsLink } from '@/lib/messaging';
+import { printNode } from '@/lib/printUtil';
 import { Printer, Save, RotateCcw, Landmark, Plus, Trash2, MessageCircle, MessageSquare, FileText, Receipt as ReceiptIcon } from 'lucide-react';
 import InvoiceGenerator from '@/pages/InvoiceGenerator';
 import ReceiptGenerator from '@/pages/ReceiptGenerator';
@@ -97,6 +98,7 @@ function BillGeneratorForm() {
   const [receiptAmount, setReceiptAmount] = useState(0);
   const [receiptMethod, setReceiptMethod] = useState<'Cash' | 'bKash' | 'Nagad' | 'Bank'>('Cash');
   const [lastReceipt, setLastReceipt] = useState<Receipt | null>(null);
+  const printRef = useRef<HTMLDivElement>(null);
 
   const buildingFlats = flats.filter((f) => f.buildingId === buildingId);
   const flatResidents = residents.filter((r) => r.flatId === flatId);
@@ -303,7 +305,7 @@ function BillGeneratorForm() {
             <h3 className="font-semibold text-gray-800">Invoice Preview</h3>
             {generatedBill && (
               <div className="flex items-center gap-2">
-                <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2 text-xs">
+                <button onClick={() => printRef.current && printNode(printRef.current)} className="btn-secondary flex items-center gap-2 text-xs">
                   <Printer size={14} /> Print / PDF
                 </button>
                 <a
@@ -327,7 +329,7 @@ function BillGeneratorForm() {
             )}
           </div>
 
-          <div id="print-area" className="p-6">
+          <div id="print-area" ref={printRef} className="p-6">
             {!generatedBill ? (
               <div className="text-center text-sm text-gray-400 py-20">Fill the form and click "Generate Invoice" to preview.</div>
             ) : (

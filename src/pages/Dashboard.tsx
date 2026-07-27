@@ -159,7 +159,7 @@ export default function Dashboard() {
                       </td>
                       <td className="py-2.5 text-right">
                         <button onClick={() => setViewBill(b)} className="text-gray-400 hover:text-brand-600 mr-2"><Eye size={16} /></button>
-                        <button onClick={() => { setViewBill(b); setTimeout(() => window.print(), 150); }} className="text-gray-400 hover:text-brand-600"><Printer size={16} /></button>
+                        <button onClick={() => setViewBill(b)} className="text-gray-400 hover:text-brand-600"><Printer size={16} /></button>
                       </td>
                     </tr>
                   ))}

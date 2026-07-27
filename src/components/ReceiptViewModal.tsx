@@ -1,27 +1,30 @@
+import { useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { X, Printer, Landmark } from 'lucide-react';
 import { money, dateLabel, numberToWords } from '@/lib/format';
+import { printNode } from '@/lib/printUtil';
 import type { Receipt, Building, Flat, Resident } from '@/types';
 
 export default function ReceiptViewModal({
   receipt, building, flat, resident, onClose,
 }: { receipt: Receipt; building?: Building; flat?: Flat; resident?: Resident; onClose: () => void }) {
   const settings = useLiveQuery(() => db.settings.toCollection().first(), []);
+  const printRef = useRef<HTMLDivElement>(null);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 modal-backdrop">
       <div className="bg-white rounded-xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 sticky top-0 bg-white z-10 no-print">
           <h3 className="font-semibold text-gray-800">Receipt {receipt.receiptNo}</h3>
           <div className="flex items-center gap-3">
-            <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2 text-xs">
+            <button onClick={() => printRef.current && printNode(printRef.current)} className="btn-secondary flex items-center gap-2 text-xs">
               <Printer size={14} /> Print
             </button>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
           </div>
         </div>
 
-        <div id="print-area" className="p-6">
+        <div id="print-area" ref={printRef} className="p-6">
           <div className="flex justify-between items-start mb-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-brand-700 text-white flex items-center justify-center font-bold">

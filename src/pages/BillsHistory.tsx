@@ -76,7 +76,7 @@ export default function BillsHistory() {
                 <td className="table-td">{dateLabel(b.dueDate)}</td>
                 <td className="table-td text-right">
                   <button onClick={() => setViewBill(b)} className="text-brand-500 hover:text-brand-700 mr-3"><Eye size={16} /></button>
-                  <button onClick={() => { setViewBill(b); setTimeout(() => window.print(), 150); }} className="text-gray-400 hover:text-brand-600 mr-3"><Printer size={16} /></button>
+                  <button onClick={() => setViewBill(b)} className="text-gray-400 hover:text-brand-600 mr-3"><Printer size={16} /></button>
                   <button onClick={() => remove(b.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
                 </td>
               </tr>
