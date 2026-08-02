@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
-import { money, dateLabel } from '@/lib/format';
+import { money, moneyCompact, dateLabel } from '@/lib/format';
 import {
   Building2, Home, Users, FileWarning, Wallet, Eye,
   FileText, Receipt, UserPlus, Layers, Plus, ChevronDown,
@@ -19,9 +19,9 @@ function StatCard({ icon: Icon, label, value, sub, bg, fg }: any) {
         <Icon size={20} style={{ color: fg }} />
       </div>
       <div className="min-w-0">
-        <div className="text-xs text-gray-500 truncate">{label}</div>
-        <div className="text-xl font-semibold text-gray-800">{value}</div>
-        {sub && <div className="text-[11px] text-gray-400 truncate">{sub}</div>}
+        <div className="text-xs text-gray-500 leading-tight">{label}</div>
+        <div className="text-xl font-semibold text-gray-800 leading-tight break-words">{value}</div>
+        {sub && <div className="text-[11px] text-gray-400 leading-tight">{sub}</div>}
       </div>
     </div>
   );
@@ -123,10 +123,10 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <StatCard icon={Building2} label="Buildings" value={buildingFilter === 'all' ? buildings.length : 1} sub="Total Buildings" bg="#e0f2fe" fg="#0284c7" />
-        <StatCard icon={Home} label="Flats" value={flatsInScope.length} sub="Total Flats" bg="#dcfce7" fg="#16a34a" />
-        <StatCard icon={Users} label="Residents" value={residentsInScope.length} sub="Total Residents" bg="#ede9fe" fg="#7c3aed" />
-        <StatCard icon={FileWarning} label="Unpaid Invoices" value={unpaidBills.length} sub={money(unpaidTotal)} bg="#ffedd5" fg="#ea580c" />
+        <StatCard icon={Building2} label="Buildings" value={buildingFilter === 'all' ? buildings.length : 1} bg="#e0f2fe" fg="#0284c7" />
+        <StatCard icon={Home} label="Flats" value={flatsInScope.length} bg="#dcfce7" fg="#16a34a" />
+        <StatCard icon={Users} label="Residents" value={residentsInScope.length} bg="#ede9fe" fg="#7c3aed" />
+        <StatCard icon={FileWarning} label="Unpaid" value={unpaidBills.length} sub={money(unpaidTotal)} bg="#ffedd5" fg="#ea580c" />
         <StatCard icon={Wallet} label="Collection" value={money(collected)} sub={monthFilter === 'all' ? 'All time' : monthFilter} bg="#ccfbf1" fg="#0d9488" />
       </div>
 
@@ -137,7 +137,7 @@ export default function Dashboard() {
               <h3 className="font-semibold text-gray-800">Recent Invoices</h3>
               <Link to="/billing/history" className="text-brand-500 text-sm font-medium hover:underline">View All</Link>
             </div>
-            <div className="overflow-x-auto">
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full min-w-[560px]">
                 <thead>
                   <tr className="text-left text-xs text-gray-400">
@@ -168,11 +168,32 @@ export default function Dashboard() {
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y divide-gray-100">
+              {bills.slice(0, 6).map((b) => (
+                <button key={b.id} onClick={() => setViewBill(b)} className="w-full text-left py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-gray-800">{b.invoiceNo}</span>
+                      <span className={b.status === 'paid' ? 'badge-paid' : b.status === 'partial' ? 'badge-partial' : 'badge-unpaid'}>
+                        {b.status[0].toUpperCase() + b.status.slice(1)}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">{residentName(b.residentId)} ({flatLabel(b.flatId)}) · {b.billingMonth}</div>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-800 shrink-0">{money(b.totalAmount)}</span>
+                </button>
+              ))}
+              {bills.length === 0 && (
+                <div className="text-center text-sm text-gray-400 py-8">No invoices yet — generate one from Bill Generator.</div>
+              )}
+            </div>
           </div>
 
           <div className="card p-5">
             <h3 className="font-semibold text-gray-800 mb-3">Monthly Overview</h3>
-            <div className="overflow-x-auto">
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full min-w-[500px]">
                 <thead>
                   <tr className="text-left text-xs text-gray-400">
@@ -193,6 +214,23 @@ export default function Dashboard() {
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile card list */}
+            <div className="sm:hidden divide-y divide-gray-100">
+              {monthly.map((m) => (
+                <div key={m.month} className="py-2.5 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-gray-800">{m.month}</div>
+                    <div className="text-xs text-gray-400">{m.count} invoices</div>
+                  </div>
+                  <div className="text-right text-sm">
+                    <div className="text-emerald-600">{money(m.collected)}</div>
+                    <div className="text-red-500">{money(m.due)}</div>
+                  </div>
+                </div>
+              ))}
+              {monthly.length === 0 && <div className="text-center text-sm text-gray-400 py-8">No data yet</div>}
             </div>
           </div>
         </div>
@@ -217,16 +255,16 @@ export default function Dashboard() {
           <div className="card p-5">
             <h3 className="font-semibold text-gray-800 mb-3">Payment Summary</h3>
             <div className="flex items-center gap-4">
-              <div className="relative w-28 h-28 shrink-0">
+              <div className="relative w-32 h-32 shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={statusData} dataKey="value" innerRadius={38} outerRadius={54} paddingAngle={3}>
+                    <Pie data={statusData} dataKey="value" innerRadius={44} outerRadius={62} paddingAngle={3}>
                       {statusData.map((s, i) => <Cell key={i} fill={s.color} />)}
                     </Pie>
                   </PieChart>
                 </ResponsiveContainer>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <div className="text-sm font-bold text-gray-800">{money(totalAll)}</div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center px-2 text-center">
+                  <div className="text-sm font-bold text-gray-800 leading-tight">{moneyCompact(totalAll)}</div>
                   <div className="text-[10px] text-gray-400">Total</div>
                 </div>
               </div>

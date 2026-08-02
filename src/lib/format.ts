@@ -2,6 +2,12 @@ export function money(n: number): string {
   return `৳ ${n.toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// Compact form for tight spaces (e.g. inside a donut chart's center) where a
+// full "৳ 27,590.00" string would overflow — e.g. "৳27.6K" instead.
+export function moneyCompact(n: number): string {
+  return `৳${new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n)}`;
+}
+
 export function dateLabel(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
