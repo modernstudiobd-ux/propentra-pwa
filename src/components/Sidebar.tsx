@@ -36,8 +36,8 @@ function Item({ to, label, icon: Icon, end }: { to: string; label: string; icon:
       to={to}
       end={end}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-          isActive ? 'bg-brand-500 text-white' : 'text-gray-300 hover:bg-white/10 hover:text-white'
+        `flex items-center gap-3 px-3.5 py-2.5 rounded-full text-sm font-medium transition-colors ${
+          isActive ? 'bg-brand-500 text-white' : 'text-gray-400 hover:bg-white/[0.06] hover:text-white'
         }`
       }
     >
@@ -59,9 +59,9 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
         className={`fixed md:sticky top-0 z-40 h-screen w-64 bg-brand-900 text-white flex flex-col transition-transform duration-200
         ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
       >
-        <div className="flex items-center justify-between px-4 h-16 border-b border-white/10">
+        <div className="flex items-center justify-between px-4 h-16 border-b border-white/[0.06]">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-lg bg-brand-500 flex items-center justify-center font-bold">B</div>
+            <div className="w-9 h-9 rounded-xl bg-brand-500 flex items-center justify-center font-semibold">B</div>
             <div>
               <div className="font-semibold leading-tight">BuildingBill</div>
               <div className="text-[11px] text-gray-400 leading-tight">Smart Building Management</div>
@@ -75,7 +75,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
 
           <button
             onClick={() => setBillingOpen((v) => !v)}
-            className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:bg-white/10 hover:text-white"
+            className="w-full flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-full text-sm font-medium text-gray-400 hover:bg-white/[0.06] hover:text-white"
           >
             <span className="flex items-center gap-3"><Receipt size={18} /> Billing</span>
             <ChevronDown size={16} className={`transition-transform ${billingOpen ? 'rotate-180' : ''}`} />
@@ -90,7 +90,7 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
             {paymentsNav.map((n) => <Item key={n.to} {...n} />)}
           </div>
 
-          <div className="pt-2 mt-2 border-t border-white/10 space-y-1">
+          <div className="pt-2 mt-2 border-t border-white/[0.06] space-y-1">
             {bottomNav.map((n) => <Item key={n.to} {...n} />)}
           </div>
         </nav>

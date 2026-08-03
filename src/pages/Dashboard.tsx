@@ -15,7 +15,7 @@ import type { Bill } from '@/types';
 function StatCard({ icon: Icon, label, value, sub, bg, fg }: any) {
   return (
     <div className="card p-4 flex items-center gap-3">
-      <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: bg }}>
+      <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0" style={{ background: bg }}>
         <Icon size={20} style={{ color: fg }} />
       </div>
       <div className="min-w-0 flex-1">
@@ -109,7 +109,7 @@ export default function Dashboard() {
           {newMenuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setNewMenuOpen(false)} />
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-100 z-20 overflow-hidden">
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-lg border border-gray-100 z-20 overflow-hidden py-1">
                 {newActions.map((a) => (
                   <button key={a.label} onClick={() => { setNewMenuOpen(false); navigate(a.to); }}
                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
@@ -240,7 +240,7 @@ export default function Dashboard() {
             <h3 className="font-semibold text-gray-800 mb-3">Quick Actions</h3>
             <div className="grid grid-cols-2 gap-2">
               {newActions.map((a) => (
-                <Link key={a.label} to={a.to} className="flex flex-col items-start gap-2 p-3 rounded-lg border border-gray-100 hover:border-brand-200 hover:bg-brand-50 transition-colors">
+                <Link key={a.label} to={a.to} className="flex flex-col items-start gap-2 p-3 rounded-2xl border border-gray-100 hover:border-brand-200 hover:bg-brand-50 transition-colors">
                   <a.icon size={18} className="text-brand-500" />
                   <span className="text-xs font-medium text-gray-700 leading-tight">{a.label}</span>
                 </Link>

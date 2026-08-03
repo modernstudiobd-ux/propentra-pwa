@@ -21,7 +21,7 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, St
           fontFamily: 'system-ui, sans-serif', padding: 24, background: '#f8fafc',
         }}>
           <div style={{ maxWidth: 480, textAlign: 'center' }}>
-            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1e3a8a', marginBottom: 8 }}>
+            <h1 style={{ fontSize: 20, fontWeight: 700, color: '#0a1f33', marginBottom: 8 }}>
               Something went wrong
             </h1>
             <p style={{ color: '#64748b', fontSize: 14, marginBottom: 12 }}>
@@ -37,7 +37,7 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, St
             <button
               onClick={() => window.location.reload()}
               style={{
-                marginTop: 16, background: '#2f5fd8', color: '#fff', border: 'none',
+                marginTop: 16, background: '#0a84ff', color: '#fff', border: 'none',
                 borderRadius: 8, padding: '8px 16px', fontSize: 14, cursor: 'pointer',
               }}
             >

@@ -25,8 +25,8 @@ export default function MiniCalendar() {
           return (
             <div
               key={i}
-              className={`h-7 flex items-center justify-center rounded-full
-                ${!c.current ? 'text-gray-300' : isToday ? 'bg-brand-500 text-white font-semibold' : 'text-gray-600 hover:bg-gray-50'}`}
+              className={`h-7 flex items-center justify-center rounded-full transition-colors
+                ${!c.current ? 'text-gray-300' : isToday ? 'bg-brand-500 text-white font-medium' : 'text-gray-600 hover:bg-gray-100'}`}
             >
               {c.day}
             </div>

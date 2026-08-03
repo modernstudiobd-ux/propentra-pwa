@@ -2,14 +2,14 @@ import { Search, Bell, Menu } from 'lucide-react';
 
 export default function Topbar({ title, onMenu }: { title: string; onMenu: () => void }) {
   return (
-    <header className="sticky top-0 z-20 h-16 bg-white border-b border-gray-100 flex items-center gap-3 px-4 md:px-6">
+    <header className="sticky top-0 z-20 h-16 bg-white/80 backdrop-blur-xl border-b border-gray-100 flex items-center gap-3 px-4 md:px-6">
       <button className="md:hidden text-gray-500" onClick={onMenu}><Menu size={22} /></button>
       <h1 className="text-lg font-semibold text-gray-800 shrink-0">{title}</h1>
 
       <div className="hidden sm:flex flex-1 max-w-md ml-2 relative">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
-          className="w-full bg-gray-50 border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+          className="w-full bg-gray-100 border border-transparent rounded-full pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:bg-white focus:border-gray-200 transition-colors"
           placeholder="Search buildings, flats, residents, invoices..."
         />
       </div>
