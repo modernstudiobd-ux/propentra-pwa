@@ -18,10 +18,10 @@ function StatCard({ icon: Icon, label, value, sub, bg, fg }: any) {
       <div className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0" style={{ background: bg }}>
         <Icon size={20} style={{ color: fg }} />
       </div>
-      <div className="min-w-0">
-        <div className="text-xs text-gray-500 leading-tight">{label}</div>
-        <div className="text-xl font-semibold text-gray-800 leading-tight break-words">{value}</div>
-        {sub && <div className="text-[11px] text-gray-400 leading-tight">{sub}</div>}
+      <div className="min-w-0 flex-1">
+        <div className="text-xs text-gray-500 leading-tight truncate">{label}</div>
+        <div className="text-lg sm:text-xl font-semibold text-gray-800 leading-tight whitespace-nowrap truncate">{value}</div>
+        {sub && <div className="text-[11px] text-gray-400 leading-tight truncate">{sub}</div>}
       </div>
     </div>
   );
