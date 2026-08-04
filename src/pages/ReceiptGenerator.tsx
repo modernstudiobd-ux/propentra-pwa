@@ -13,11 +13,12 @@ export default function ReceiptGenerator() {
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
   const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
   const receipts = useLiveQuery(() => db.receipts.orderBy('id').reverse().toArray(), []) ?? [];
+  const settings = useLiveQuery(() => db.settings.toCollection().first(), []);
 
   const [query, setQuery] = useState('');
   const [selectedBillId, setSelectedBillId] = useState<number | null>(null);
   const [amount, setAmount] = useState(0);
-  const [method, setMethod] = useState<'Cash' | 'bKash' | 'Nagad' | 'Bank'>('Cash');
+  const [method, setMethod] = useState('Cash');
   const [viewReceipt, setViewReceipt] = useState<Receipt | null>(null);
 
   const residentName = (id: number) => residents.find((r) => r.id === id)?.name ?? '—';
@@ -123,11 +124,11 @@ export default function ReceiptGenerator() {
                 <div className="flex justify-between font-semibold text-gray-800"><span>Due</span><span>{money(due)}</span></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="label">Amount Received (৳)</label>
+                <div><label className="label">Amount Received</label>
                   <input type="number" className="input" value={amount || ''} onChange={(e) => setAmount(Number(e.target.value))} /></div>
                 <div><label className="label">Method</label>
-                  <select className="input" value={method} onChange={(e) => setMethod(e.target.value as any)}>
-                    <option>Cash</option><option>bKash</option><option>Nagad</option><option>Bank</option>
+                  <select className="input" value={method} onChange={(e) => setMethod(e.target.value)}>
+                    {(settings?.paymentMethods ?? ['Cash']).map((m) => <option key={m}>{m}</option>)}
                   </select></div>
               </div>
               <div className="text-xs text-gray-400">In words: {numberToWords(amount)}</div>

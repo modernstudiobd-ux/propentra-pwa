@@ -57,7 +57,7 @@ export default function BillsHistory() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="table-th">#</th><th className="table-th">Invoice</th><th className="table-th">Resident / Flat</th>
-                <th className="table-th">Month</th><th className="table-th">Total (৳)</th><th className="table-th">Status</th>
+                <th className="table-th">Month</th><th className="table-th">Total</th><th className="table-th">Status</th>
                 <th className="table-th">Due Date</th><th className="table-th text-right">Action</th>
               </tr>
             </thead>

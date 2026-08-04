@@ -21,6 +21,7 @@ export default function SettingsPage() {
   const [section, setSection] = useState<typeof sections[number]['key']>('company');
   const [form, setForm] = useState<CompanySettings | null>(null);
   const [signaturePadOpen, setSignaturePadOpen] = useState(false);
+  const [newMethod, setNewMethod] = useState('');
 
   useEffect(() => { if (settings) setForm(settings); }, [settings?.id]);
 
@@ -50,6 +51,20 @@ export default function SettingsPage() {
     if (!form) return;
     setForm({ ...form, signatureImage: dataUrl });
     setSignaturePadOpen(false);
+  }
+
+  function addMethod() {
+    const name = newMethod.trim();
+    if (!name || !form) return;
+    const existing = form.paymentMethods ?? [];
+    if (existing.some((m) => m.toLowerCase() === name.toLowerCase())) { setNewMethod(''); return; }
+    setForm({ ...form, paymentMethods: [...existing, name] });
+    setNewMethod('');
+  }
+
+  function removeMethod(name: string) {
+    if (!form) return;
+    setForm({ ...form, paymentMethods: (form.paymentMethods ?? []).filter((m) => m !== name) });
   }
 
   if (!form) return null;
@@ -162,7 +177,58 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {!['company', 'charges', 'invoice'].includes(section) && (
+        {section === 'general' && (
+          <div className="space-y-4 max-w-lg">
+            <h3 className="font-semibold text-gray-800">General Settings</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label">Currency Symbol</label>
+                <input className="input" placeholder="e.g. $, €, £, ৳, ₹" value={form.currencySymbol ?? ''}
+                  onChange={(e) => setForm({ ...form, currencySymbol: e.target.value })} /></div>
+              <div><label className="label">Currency Name</label>
+                <input className="input" placeholder="e.g. Dollars, Euros, Taka" value={form.currencyName ?? ''}
+                  onChange={(e) => setForm({ ...form, currencyName: e.target.value })} /></div>
+            </div>
+            <div className="text-[11px] text-gray-400 -mt-2">
+              The symbol shows on every amount app-wide; the name is used in "amount in words" on invoices/receipts (e.g. "Five Thousand {form.currencyName || 'Taka'} Only").
+            </div>
+            <div><label className="label">Country Dialing Code (for WhatsApp)</label>
+              <input className="input" placeholder="e.g. 880, 1, 44, 91" value={form.countryCode ?? ''}
+                onChange={(e) => setForm({ ...form, countryCode: e.target.value })} />
+              <div className="text-[11px] text-gray-400 mt-1">Used to turn a local mobile number into the full international format WhatsApp requires. Leave blank if residents' numbers are already entered in full international format.</div>
+            </div>
+            <button onClick={save} className="btn-primary">Save Changes</button>
+          </div>
+        )}
+
+        {section === 'payment' && (
+          <div className="space-y-4 max-w-lg">
+            <h3 className="font-semibold text-gray-800">Payment Methods</h3>
+            <div className="text-sm text-gray-500">These appear in every payment-method dropdown across the app (Bill Generator, Receipt Generator, Payments). Add whatever your residents actually use — bank transfer, cash, or any local mobile payment service.</div>
+            <div className="flex flex-wrap gap-2">
+              {(form.paymentMethods ?? []).map((m) => (
+                <span key={m} className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 rounded-full pl-3 pr-2 py-1 text-sm">
+                  {m}
+                  <button onClick={() => removeMethod(m)} className="text-gray-400 hover:text-red-500"><Trash2 size={13} /></button>
+                </span>
+              ))}
+              {(form.paymentMethods ?? []).length === 0 && (
+                <div className="text-sm text-gray-400">No payment methods yet — add at least one below.</div>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <input
+                className="input"
+                placeholder="e.g. bKash, Nagad, Venmo, PayPal, M-Pesa..."
+                value={newMethod}
+                onChange={(e) => setNewMethod(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addMethod(); } }}
+              />
+              <button onClick={addMethod} className="btn-secondary shrink-0">Add</button>
+            </div>
+            <button onClick={save} className="btn-primary">Save Changes</button>
+          </div>
+        )}
+        {!['company', 'charges', 'invoice', 'general', 'payment'].includes(section) && (
           <div className="text-sm text-gray-400 py-10 text-center">This section can be customized further as your needs grow.</div>
         )}
       </div>

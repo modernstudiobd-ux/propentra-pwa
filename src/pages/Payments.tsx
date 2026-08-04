@@ -12,13 +12,14 @@ export default function Payments() {
   const bills = useLiveQuery(() => db.bills.toArray(), []) ?? [];
   const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
+  const settings = useLiveQuery(() => db.settings.toCollection().first(), []);
   const [query, setQuery] = useState('');
 
   const [open, setOpen] = useState(false);
   const [invoiceQuery, setInvoiceQuery] = useState('');
   const [selectedBillId, setSelectedBillId] = useState<number | ''>('');
   const [amount, setAmount] = useState(0);
-  const [method, setMethod] = useState<'Cash' | 'bKash' | 'Nagad' | 'Bank'>('Cash');
+  const [method, setMethod] = useState('Cash');
 
   const residentName = (id: number) => residents.find((r) => r.id === id)?.name ?? '—';
   const flatLabel = (id: number) => flats.find((f) => f.id === id)?.unitNo ?? '—';
@@ -76,7 +77,7 @@ export default function Payments() {
               <tr>
                 <th className="table-th">#</th><th className="table-th">Date</th><th className="table-th">Invoice #</th>
                 <th className="table-th">Resident / Flat</th><th className="table-th">Method</th>
-                <th className="table-th">Amount (৳)</th><th className="table-th">Type</th><th className="table-th text-right">Action</th>
+                <th className="table-th">Amount</th><th className="table-th">Type</th><th className="table-th text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -151,11 +152,11 @@ export default function Payments() {
           {selectedBill && (
             <>
               <div className="grid grid-cols-2 gap-3">
-                <div><label className="label">Amount (৳)</label>
+                <div><label className="label">Amount</label>
                   <input type="number" className="input" value={amount || ''} onChange={(e) => setAmount(Number(e.target.value))} /></div>
                 <div><label className="label">Method</label>
-                  <select className="input" value={method} onChange={(e) => setMethod(e.target.value as any)}>
-                    <option>Cash</option><option>bKash</option><option>Nagad</option><option>Bank</option>
+                  <select className="input" value={method} onChange={(e) => setMethod(e.target.value)}>
+                    {(settings?.paymentMethods ?? ['Cash']).map((m) => <option key={m}>{m}</option>)}
                   </select></div>
               </div>
               <div className="flex gap-2 pt-2">

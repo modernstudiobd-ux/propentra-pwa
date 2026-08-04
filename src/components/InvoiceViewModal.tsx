@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { X, Printer, Landmark } from 'lucide-react';
 import { money, dateLabel, numberToWords } from '@/lib/format';
+import { currencyState } from '@/lib/currency';
 import { printNode } from '@/lib/printUtil';
 import type { Bill, Building, Flat, Resident } from '@/types';
 
@@ -40,7 +41,7 @@ export default function InvoiceViewModal({
             </div>
             <div className="text-right">
               <span className="bg-brand-50 text-brand-700 px-3 py-1 rounded-full text-xs font-semibold">INVOICE</span>
-              <div className="text-[10px] text-gray-400 mt-1">Currency: BDT (৳)</div>
+              <div className="text-[10px] text-gray-400 mt-1">Currency: {currencyState.name} ({currencyState.symbol})</div>
             </div>
           </div>
 
@@ -61,7 +62,7 @@ export default function InvoiceViewModal({
           <table className="w-full text-sm mb-3">
             <thead><tr className="text-left text-xs text-gray-400 border-b border-gray-100">
               <th className="py-2">#</th><th>Description</th><th className="text-right">Qty</th>
-              <th className="text-right">Unit Price (৳)</th><th className="text-right">Amount (৳)</th>
+              <th className="text-right">Unit Price</th><th className="text-right">Amount</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {(() => {

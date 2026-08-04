@@ -27,7 +27,7 @@ function statusFor(bill: Bill, paidAmount: number): Bill['status'] {
 export async function recordPaymentForBill(
   bill: Bill,
   amountReceived: number,
-  method: 'Cash' | 'bKash' | 'Nagad' | 'Bank'
+  method: string
 ) {
   if (!bill.id) throw new Error('Bill has no id');
   const newPaid = bill.paidAmount + amountReceived;

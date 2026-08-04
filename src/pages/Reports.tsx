@@ -96,7 +96,7 @@ export default function Reports() {
           <thead className="bg-gray-50">
             <tr>
               <th className="table-th">Month</th><th className="table-th">Total Invoices</th>
-              <th className="table-th">Paid Amount (৳)</th><th className="table-th">Due Amount (৳)</th><th className="table-th">Collection %</th>
+              <th className="table-th">Paid Amount</th><th className="table-th">Due Amount</th><th className="table-th">Collection %</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">

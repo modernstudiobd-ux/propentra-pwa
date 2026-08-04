@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel, numberToWords } from '@/lib/format';
+import { currencyState } from '@/lib/currency';
 import { genInvoiceNo, recordPaymentForBill } from '@/lib/billing';
 import { buildInvoiceMessage, buildReceiptMessage, whatsappLink, smsLink } from '@/lib/messaging';
 import { printNode } from '@/lib/printUtil';
@@ -96,7 +97,7 @@ function BillGeneratorForm() {
   const [generatedBill, setGeneratedBill] = useState<Bill | null>(null);
   const [showReceiptForm, setShowReceiptForm] = useState(false);
   const [receiptAmount, setReceiptAmount] = useState(0);
-  const [receiptMethod, setReceiptMethod] = useState<'Cash' | 'bKash' | 'Nagad' | 'Bank'>('Cash');
+  const [receiptMethod, setReceiptMethod] = useState('Cash');
   const [lastReceipt, setLastReceipt] = useState<Receipt | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -221,7 +222,7 @@ function BillGeneratorForm() {
               <input type="number" className="input" value={prevReading || ''} placeholder="0" onChange={(e) => setPrevReading(Number(e.target.value))} /></div>
             <div><label className="label">Current Reading</label>
               <input type="number" className="input" value={currReading || ''} placeholder="0" onChange={(e) => setCurrReading(Number(e.target.value))} /></div>
-            <div><label className="label">Rate per Unit (৳)</label>
+            <div><label className="label">Rate per Unit</label>
               <input type="number" className="input" value={rate || ''} placeholder="0" onChange={(e) => setRate(Number(e.target.value))} /></div>
           </div>
           <div className="text-sm text-gray-500">Units used: <b className="text-gray-800">{units}</b> · Electricity: <b className="text-gray-800">{money(electricityAmount)}</b>
@@ -347,7 +348,7 @@ function BillGeneratorForm() {
                   </div>
                   <div className="text-right">
                     <span className="bg-brand-50 text-brand-700 px-3 py-1 rounded-full text-xs font-semibold">INVOICE</span>
-                    <div className="text-[10px] text-gray-400 mt-1">Currency: BDT (৳)</div>
+                    <div className="text-[10px] text-gray-400 mt-1">Currency: {currencyState.name} ({currencyState.symbol})</div>
                   </div>
                 </div>
 
@@ -380,7 +381,7 @@ function BillGeneratorForm() {
                 <table className="w-full text-sm mb-3">
                   <thead><tr className="text-left text-xs text-gray-400 border-b border-gray-100">
                     <th className="py-2">#</th><th>Description</th><th className="text-right">Qty</th>
-                    <th className="text-right">Unit Price (৳)</th><th className="text-right">Amount (৳)</th>
+                    <th className="text-right">Unit Price</th><th className="text-right">Amount</th>
                   </tr></thead>
                   <tbody className="divide-y divide-gray-50">
                     {(() => {
@@ -447,11 +448,11 @@ function BillGeneratorForm() {
               <div className="space-y-3">
                 <h3 className="font-semibold text-gray-800">Record Payment</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="label">Amount Received (৳)</label>
+                  <div><label className="label">Amount Received</label>
                     <input type="number" className="input" value={receiptAmount} onChange={(e) => setReceiptAmount(Number(e.target.value))} /></div>
                   <div><label className="label">Method</label>
-                    <select className="input" value={receiptMethod} onChange={(e) => setReceiptMethod(e.target.value as any)}>
-                      <option>Cash</option><option>bKash</option><option>Nagad</option><option>Bank</option>
+                    <select className="input" value={receiptMethod} onChange={(e) => setReceiptMethod(e.target.value)}>
+                      {(settings?.paymentMethods ?? ['Cash']).map((m) => <option key={m}>{m}</option>)}
                     </select></div>
                 </div>
                 <div className="text-xs text-gray-400">In words: {numberToWords(receiptAmount)}</div>

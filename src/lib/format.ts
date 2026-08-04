@@ -1,11 +1,13 @@
+import { currencyState } from '@/lib/currency';
+
 export function money(n: number): string {
-  return `৳ ${n.toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${currencyState.symbol} ${n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 // Compact form for tight spaces (e.g. inside a donut chart's center) where a
-// full "৳ 27,590.00" string would overflow — e.g. "৳27.6K" instead.
+// full "$ 27,590.00" string would overflow — e.g. "$27.6K" instead.
 export function moneyCompact(n: number): string {
-  return `৳${new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n)}`;
+  return `${currencyState.symbol}${new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n)}`;
 }
 
 export function dateLabel(iso: string): string {
@@ -18,17 +20,24 @@ export function numberToWords(n: number): string {
     'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
   const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
-  function inWords(num: number): string {
+  function underThousand(num: number): string {
     if (num === 0) return '';
     if (num < 20) return a[num] + ' ';
-    if (num < 100) return b[Math.floor(num / 10)] + ' ' + inWords(num % 10);
-    if (num < 1000) return a[Math.floor(num / 100)] + ' Hundred ' + inWords(num % 100);
-    if (num < 100000) return inWords(Math.floor(num / 1000)) + 'Thousand ' + inWords(num % 1000);
-    if (num < 10000000) return inWords(Math.floor(num / 100000)) + 'Lakh ' + inWords(num % 100000);
-    return inWords(Math.floor(num / 10000000)) + 'Crore ' + inWords(num % 10000000);
+    if (num < 100) return b[Math.floor(num / 10)] + ' ' + underThousand(num % 10);
+    return a[Math.floor(num / 100)] + ' Hundred ' + underThousand(num % 100);
+  }
+
+  // Standard international grouping (Thousand / Million / Billion), not the
+  // South Asian Lakh/Crore system, so this reads correctly worldwide.
+  function inWords(num: number): string {
+    if (num === 0) return '';
+    if (num < 1000) return underThousand(num);
+    if (num < 1_000_000) return inWords(Math.floor(num / 1000)) + 'Thousand ' + underThousand(num % 1000);
+    if (num < 1_000_000_000) return inWords(Math.floor(num / 1_000_000)) + 'Million ' + inWords(num % 1_000_000);
+    return inWords(Math.floor(num / 1_000_000_000)) + 'Billion ' + inWords(num % 1_000_000_000);
   }
 
   const whole = Math.floor(n);
   const words = inWords(whole).trim();
-  return (words || 'Zero') + ' Taka Only';
+  return `${words || 'Zero'} ${currencyState.name} Only`;
 }
