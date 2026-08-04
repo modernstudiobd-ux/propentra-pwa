@@ -70,6 +70,19 @@ export class BuildingBillDB extends Dexie {
 
 export const db = new BuildingBillDB();
 
+// If another tab has an older version of this database open, IndexedDB
+// blocks the upgrade indefinitely with no error and no timeout - the app
+// just hangs on the loading screen forever. These handlers make that
+// recoverable: the tab holding the old connection closes it and reloads,
+// which lets the upgrade in the other tab proceed.
+db.on('blocked', () => {
+  console.warn('BuildingBill: database upgrade blocked by another open tab.');
+});
+db.on('versionchange', () => {
+  db.close();
+  window.location.reload();
+});
+
 // No demo/seed data at all. The only thing ensured on first run is a single
 // (empty) settings row, since Bill Generator reads default rates from it —
 // everything else (buildings, flats, residents, invoices...) is created by

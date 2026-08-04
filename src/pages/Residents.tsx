@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { Plus, Pencil, Trash2, Search } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import Modal from '@/components/Modal';
 import type { Resident, ResidentType } from '@/types';
 
@@ -63,9 +64,21 @@ export default function Residents() {
             <option value="Owner">Flat Owner</option>
           </select>
         </div>
-        <button onClick={openAdd} className="btn-primary flex items-center gap-2 justify-center" disabled={flats.length === 0}>
-          <Plus size={16} /> Add Resident
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button
+            onClick={openAdd}
+            className="btn-primary flex items-center gap-2 justify-center"
+            disabled={flats.length === 0}
+            title={flats.length === 0 ? 'Add a flat first before adding residents' : undefined}
+          >
+            <Plus size={16} /> Add Resident
+          </button>
+          {flats.length === 0 && (
+            <span className="text-xs text-gray-400">
+              No flats yet — <Link to="/flats" className="text-brand-500 hover:underline">add one first</Link>.
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="card overflow-hidden">

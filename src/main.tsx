@@ -15,7 +15,18 @@ function render() {
   );
 }
 
-seedIfEmpty()
-  .catch((err) => console.error('Seeding failed (app will still load):', err))
-  .finally(render);
+function renderOnce() {
+  if (document.getElementById('root')?.dataset.mounted) return;
+  document.getElementById('root')!.dataset.mounted = 'true';
+  render();
+}
+
+function timeout(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+Promise.race([
+  seedIfEmpty().catch((err) => console.error('Seeding failed (app will still load):', err)),
+  timeout(4000).then(() => console.warn('BuildingBill: startup is taking unusually long (database may be blocked by another tab) - loading the app shell anyway.')),
+]).finally(renderOnce);
 
