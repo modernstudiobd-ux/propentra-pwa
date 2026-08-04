@@ -12,15 +12,15 @@ import InvoiceViewModal from '@/components/InvoiceViewModal';
 import MiniCalendar from '@/components/MiniCalendar';
 import type { Bill } from '@/types';
 
-function StatCard({ icon: Icon, label, value, sub, bg, fg }: any) {
+function StatCard({ icon: Icon, label, value, sub, bg, fg, title }: any) {
   return (
-    <div className="card p-4 flex items-center gap-3">
-      <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0" style={{ background: bg }}>
-        <Icon size={20} style={{ color: fg }} />
+    <div className="card p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+      <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center shrink-0" style={{ background: bg }}>
+        <Icon size={18} style={{ color: fg }} />
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-xs text-gray-500 leading-tight truncate">{label}</div>
-        <div className="text-lg sm:text-xl font-semibold text-gray-800 leading-tight whitespace-nowrap truncate">{value}</div>
+        <div className="text-lg sm:text-xl font-semibold text-gray-800 leading-tight whitespace-nowrap truncate" title={title}>{value}</div>
         {sub && <div className="text-[11px] text-gray-400 leading-tight truncate">{sub}</div>}
       </div>
     </div>
@@ -126,8 +126,8 @@ export default function Dashboard() {
         <StatCard icon={Building2} label="Buildings" value={buildingFilter === 'all' ? buildings.length : 1} bg="#e0f2fe" fg="#0284c7" />
         <StatCard icon={Home} label="Flats" value={flatsInScope.length} bg="#dcfce7" fg="#16a34a" />
         <StatCard icon={Users} label="Residents" value={residentsInScope.length} bg="#ede9fe" fg="#7c3aed" />
-        <StatCard icon={FileWarning} label="Unpaid" value={unpaidBills.length} sub={money(unpaidTotal)} bg="#ffedd5" fg="#ea580c" />
-        <StatCard icon={Wallet} label="Collection" value={money(collected)} sub={monthFilter === 'all' ? 'All time' : monthFilter} bg="#ccfbf1" fg="#0d9488" />
+        <StatCard icon={FileWarning} label="Unpaid" value={unpaidBills.length} sub={moneyCompact(unpaidTotal)} title={money(unpaidTotal)} bg="#ffedd5" fg="#ea580c" />
+        <StatCard icon={Wallet} label="Collection" value={moneyCompact(collected)} title={money(collected)} sub={monthFilter === 'all' ? 'All time' : monthFilter} bg="#ccfbf1" fg="#0d9488" />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
