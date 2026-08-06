@@ -93,9 +93,9 @@ export interface CompanySettings {
   defaultTaxRate?: number; // % VAT/tax applied to bills by default
   bankDetails?: string; // payment instructions (bank/mobile banking) shown on invoices
   invoiceNotes?: string; // footer terms/notes shown on invoices
-  currencySymbol?: string; // e.g. '$', '€', '৳' - shown on every amount
-  currencyName?: string; // e.g. 'Dollars', 'Euros', 'Taka' - used in "amount in words"
-  countryCode?: string; // e.g. '1', '44', '880' - dialing code used to build WhatsApp links
+  currencySymbol?: string; // e.g. '$', '€', '£' - shown on every amount
+  currencyName?: string; // e.g. 'US Dollars', 'Euros', 'Pounds' - used in "amount in words"
+  countryCode?: string; // e.g. '1', '44', '91' - dialing code used to build WhatsApp links
   paymentMethods?: string[]; // configurable list shown in every payment-method dropdown
   defaultRates: {
     electricityRate: number;

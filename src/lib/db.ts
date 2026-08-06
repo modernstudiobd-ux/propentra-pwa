@@ -100,9 +100,9 @@ export async function seedIfEmpty() {
     defaultTaxRate: 0,
     bankDetails: '',
     invoiceNotes: 'Please make payment by the due date. Thank you for your cooperation.',
-    currencySymbol: '৳',
-    currencyName: 'Taka',
-    countryCode: '880',
+    currencySymbol: '$',
+    currencyName: 'US Dollars',
+    countryCode: '',
     paymentMethods: ['Cash', 'Bank Transfer', 'Card'],
     defaultRates: {
       electricityRate: 0,

@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { money, dateLabel } from '@/lib/format';
 import { Search, Plus, Trash2 } from 'lucide-react';
 import Modal from '@/components/Modal';
+import PaymentMethodSelect from '@/components/PaymentMethodSelect';
 import { recordPaymentForBill, removePayment } from '@/lib/billing';
 import type { Bill } from '@/types';
 
@@ -155,9 +156,12 @@ export default function Payments() {
                 <div><label className="label">Amount</label>
                   <input type="number" className="input" value={amount || ''} onChange={(e) => setAmount(Number(e.target.value))} /></div>
                 <div><label className="label">Method</label>
-                  <select className="input" value={method} onChange={(e) => setMethod(e.target.value)}>
-                    {(settings?.paymentMethods ?? ['Cash']).map((m) => <option key={m}>{m}</option>)}
-                  </select></div>
+                  <PaymentMethodSelect
+                    value={method}
+                    onChange={setMethod}
+                    methods={settings?.paymentMethods ?? ['Cash']}
+                    onAddCustom={(name) => settings && db.settings.put({ ...settings, paymentMethods: [...(settings.paymentMethods ?? []), name] })}
+                  /></div>
               </div>
               <div className="flex gap-2 pt-2">
                 <button onClick={savePayment} className="btn-primary flex-1" disabled={amount <= 0}>Save Payment</button>

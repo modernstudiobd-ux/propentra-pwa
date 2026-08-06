@@ -6,7 +6,7 @@ function digitsOnly(mobile: string) {
   return mobile.replace(/\D/g, '');
 }
 
-// Uses the country dialing code configured in Settings (e.g. '880', '1', '44')
+// Uses the country dialing code configured in Settings (e.g. '1', '44', '91')
 // to turn a local number like "01711-223344" into the full international
 // format WhatsApp's wa.me links require. If no country code is configured,
 // the number is passed through as-is (works if residents already enter

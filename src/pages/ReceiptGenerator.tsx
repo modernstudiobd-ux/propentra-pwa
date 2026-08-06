@@ -5,6 +5,7 @@ import { money, dateLabel, numberToWords } from '@/lib/format';
 import { Search, Receipt as ReceiptIcon, Eye, Printer, Save } from 'lucide-react';
 import { recordPaymentForBill } from '@/lib/billing';
 import ReceiptViewModal from '@/components/ReceiptViewModal';
+import PaymentMethodSelect from '@/components/PaymentMethodSelect';
 import type { Bill, Receipt } from '@/types';
 
 export default function ReceiptGenerator() {
@@ -127,9 +128,12 @@ export default function ReceiptGenerator() {
                 <div><label className="label">Amount Received</label>
                   <input type="number" className="input" value={amount || ''} onChange={(e) => setAmount(Number(e.target.value))} /></div>
                 <div><label className="label">Method</label>
-                  <select className="input" value={method} onChange={(e) => setMethod(e.target.value)}>
-                    {(settings?.paymentMethods ?? ['Cash']).map((m) => <option key={m}>{m}</option>)}
-                  </select></div>
+                  <PaymentMethodSelect
+                    value={method}
+                    onChange={setMethod}
+                    methods={settings?.paymentMethods ?? ['Cash']}
+                    onAddCustom={(name) => settings && db.settings.put({ ...settings, paymentMethods: [...(settings.paymentMethods ?? []), name] })}
+                  /></div>
               </div>
               <div className="text-xs text-gray-400">In words: {numberToWords(amount)}</div>
               <button onClick={generateReceipt} disabled={amount <= 0} className="btn-primary w-full flex items-center justify-center gap-2">

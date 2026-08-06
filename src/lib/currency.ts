@@ -2,9 +2,9 @@ import { liveQuery } from 'dexie';
 import { db } from '@/lib/db';
 
 export const currencyState = {
-  symbol: '৳',
-  name: 'Taka',
-  countryCode: '880',
+  symbol: '$',
+  name: 'US Dollars',
+  countryCode: '',
 };
 
 let started = false;
@@ -15,8 +15,8 @@ export function watchCurrencySettings() {
   started = true;
   liveQuery(() => db.settings.toCollection().first()).subscribe((settings) => {
     if (!settings) return;
-    currencyState.symbol = settings.currencySymbol || '৳';
-    currencyState.name = settings.currencyName || 'Taka';
-    currencyState.countryCode = settings.countryCode || '880';
+    currencyState.symbol = settings.currencySymbol || '$';
+    currencyState.name = settings.currencyName || 'US Dollars';
+    currencyState.countryCode = settings.countryCode || '';
   });
 }

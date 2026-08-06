@@ -9,6 +9,7 @@ import { printNode } from '@/lib/printUtil';
 import { Printer, Save, RotateCcw, Landmark, Plus, Trash2, MessageCircle, MessageSquare, FileText, Receipt as ReceiptIcon } from 'lucide-react';
 import InvoiceGenerator from '@/pages/InvoiceGenerator';
 import ReceiptGenerator from '@/pages/ReceiptGenerator';
+import PaymentMethodSelect from '@/components/PaymentMethodSelect';
 import type { Bill, ChargeLine, Receipt } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -451,9 +452,12 @@ function BillGeneratorForm() {
                   <div><label className="label">Amount Received</label>
                     <input type="number" className="input" value={receiptAmount} onChange={(e) => setReceiptAmount(Number(e.target.value))} /></div>
                   <div><label className="label">Method</label>
-                    <select className="input" value={receiptMethod} onChange={(e) => setReceiptMethod(e.target.value)}>
-                      {(settings?.paymentMethods ?? ['Cash']).map((m) => <option key={m}>{m}</option>)}
-                    </select></div>
+                    <PaymentMethodSelect
+                      value={receiptMethod}
+                      onChange={setReceiptMethod}
+                      methods={settings?.paymentMethods ?? ['Cash']}
+                      onAddCustom={(name) => settings && db.settings.put({ ...settings, paymentMethods: [...(settings.paymentMethods ?? []), name] })}
+                    /></div>
                 </div>
                 <div className="text-xs text-gray-400">In words: {numberToWords(receiptAmount)}</div>
                 <div className="flex gap-2">

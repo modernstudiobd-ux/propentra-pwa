@@ -182,17 +182,17 @@ export default function SettingsPage() {
             <h3 className="font-semibold text-gray-800">General Settings</h3>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="label">Currency Symbol</label>
-                <input className="input" placeholder="e.g. $, €, £, ৳, ₹" value={form.currencySymbol ?? ''}
+                <input className="input" placeholder="e.g. $, €, £, ¥, ₹" value={form.currencySymbol ?? ''}
                   onChange={(e) => setForm({ ...form, currencySymbol: e.target.value })} /></div>
               <div><label className="label">Currency Name</label>
-                <input className="input" placeholder="e.g. Dollars, Euros, Taka" value={form.currencyName ?? ''}
+                <input className="input" placeholder="e.g. US Dollars, Euros, Pounds" value={form.currencyName ?? ''}
                   onChange={(e) => setForm({ ...form, currencyName: e.target.value })} /></div>
             </div>
             <div className="text-[11px] text-gray-400 -mt-2">
-              The symbol shows on every amount app-wide; the name is used in "amount in words" on invoices/receipts (e.g. "Five Thousand {form.currencyName || 'Taka'} Only").
+              The symbol shows on every amount app-wide; the name is used in "amount in words" on invoices/receipts (e.g. "Five Thousand {form.currencyName || 'US Dollars'} Only").
             </div>
             <div><label className="label">Country Dialing Code (for WhatsApp)</label>
-              <input className="input" placeholder="e.g. 880, 1, 44, 91" value={form.countryCode ?? ''}
+              <input className="input" placeholder="e.g. 1, 44, 91, 61" value={form.countryCode ?? ''}
                 onChange={(e) => setForm({ ...form, countryCode: e.target.value })} />
               <div className="text-[11px] text-gray-400 mt-1">Used to turn a local mobile number into the full international format WhatsApp requires. Leave blank if residents' numbers are already entered in full international format.</div>
             </div>
