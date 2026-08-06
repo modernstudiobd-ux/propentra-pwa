@@ -1,4 +1,5 @@
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, Wand2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const faqs = [
   { q: 'Where is my data stored?', a: 'Everything (buildings, flats, residents, invoices, receipts, payments) is stored locally in your browser using IndexedDB. Nothing is sent to any server.' },
@@ -12,6 +13,19 @@ const faqs = [
 export default function Help() {
   return (
     <div className="max-w-2xl mx-auto space-y-4">
+      <div className="card p-5 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
+            <Wand2 size={18} />
+          </div>
+          <div>
+            <div className="font-medium text-gray-800 text-sm">Setup Wizard</div>
+            <div className="text-xs text-gray-400">Re-run the guided setup for company info, currency, and your first building.</div>
+          </div>
+        </div>
+        <Link to="/setup" className="btn-secondary shrink-0">Run Setup Wizard</Link>
+      </div>
+
       <div className="card p-5">
         <div className="flex items-center gap-2 mb-4">
           <HelpCircle className="text-brand-500" size={20} />

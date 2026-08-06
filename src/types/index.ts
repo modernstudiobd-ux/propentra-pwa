@@ -83,6 +83,7 @@ export interface Payment {
 
 export interface CompanySettings {
   id?: number;
+  onboardingComplete?: boolean;
   companyName: string;
   address: string;
   phone: string;

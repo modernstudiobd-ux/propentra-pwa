@@ -92,6 +92,7 @@ export async function seedIfEmpty() {
   if (settingsCount > 0) return;
 
   await db.settings.add({
+    onboardingComplete: false,
     companyName: '',
     address: '',
     phone: '',
