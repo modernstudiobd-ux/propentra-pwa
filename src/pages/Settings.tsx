@@ -27,7 +27,7 @@ export default function SettingsPage() {
 
   async function save() {
     if (!form?.id) return;
-    await db.settings.update(form.id, form);
+    await db.settings.put(form);
     alert('Settings saved.');
   }
 
