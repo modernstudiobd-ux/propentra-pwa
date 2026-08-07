@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
@@ -26,15 +27,24 @@ export default function App() {
   const settings = useLiveQuery(() => db.settings.toCollection().first(), []);
   const buildingCount = useLiveQuery(() => db.buildings.count(), []);
 
-  // Auto-show the wizard only for a genuinely fresh, unconfigured install
-  // (no company name AND no buildings yet) - never for an already-active
-  // account, even if onboardingComplete happens to be unset on old data.
-  const needsOnboarding =
-    settings !== undefined && buildingCount !== undefined &&
-    !settings.onboardingComplete && !settings.companyName?.trim() && buildingCount === 0;
+  // Whether to auto-show the wizard is decided ONCE, the first time data is
+  // available - not re-derived live. If it stayed a live reactive check, the
+  // wizard's own "add your first building" step would flip buildingCount to
+  // 1 mid-flow, which would make this condition false and instantly boot
+  // the person out to the Dashboard before they finished setup.
+  const [showWizard, setShowWizard] = useState<boolean | null>(null);
 
-  if (needsOnboarding) {
-    return <SetupWizard onFinish={() => window.location.reload()} />;
+  useEffect(() => {
+    if (showWizard !== null) return; // decision already locked in
+    if (settings === undefined || buildingCount === undefined) return; // still loading
+    const needsOnboarding = !settings.onboardingComplete && !settings.companyName?.trim() && buildingCount === 0;
+    setShowWizard(needsOnboarding);
+  }, [settings, buildingCount, showWizard]);
+
+  if (showWizard === null) return null; // brief initial load, avoids a flash of the wrong screen
+
+  if (showWizard) {
+    return <SetupWizard onFinish={() => setShowWizard(false)} />;
   }
 
   return (

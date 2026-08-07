@@ -218,7 +218,7 @@ export default function SettingsPage() {
             <div className="flex gap-2">
               <input
                 className="input"
-                placeholder="e.g. bKash, Nagad, Venmo, PayPal, M-Pesa..."
+                placeholder="e.g. Bank Transfer, PayPal, Wire Transfer, Credit Card..."
                 value={newMethod}
                 onChange={(e) => setNewMethod(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addMethod(); } }}

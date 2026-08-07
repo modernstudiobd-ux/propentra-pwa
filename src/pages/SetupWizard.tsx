@@ -199,7 +199,7 @@ export default function SetupWizard({ onFinish }: { onFinish: () => void }) {
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  <input className="input" placeholder="e.g. Bank Transfer, PayPal, bKash..." value={newMethod}
+                  <input className="input" placeholder="e.g. Bank Transfer, PayPal, Credit Card..." value={newMethod}
                     onChange={(e) => setNewMethod(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addMethod(); } }} />
                   <button onClick={addMethod} className="btn-secondary shrink-0">Add</button>
