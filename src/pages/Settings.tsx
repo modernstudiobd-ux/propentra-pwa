@@ -11,7 +11,7 @@ const sections = [
   { key: 'general', label: 'General Settings', icon: SlidersHorizontal },
   { key: 'invoice', label: 'Invoice Settings', icon: FileText },
   { key: 'receipt', label: 'Receipt Settings', icon: Receipt },
-  { key: 'charges', label: 'Charges / Heads', icon: Wallet },
+  { key: 'charges', label: 'Electricity Rate', icon: Wallet },
   { key: 'payment', label: 'Payment Methods', icon: CreditCard },
   { key: 'backup', label: 'Backup Reminder', icon: DatabaseBackup },
 ] as const;
@@ -163,15 +163,11 @@ export default function SettingsPage() {
 
         {section === 'charges' && (
           <div className="space-y-4 max-w-lg">
-            <h3 className="font-semibold text-gray-800">Default Charge Rates</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {Object.entries(form.defaultRates).map(([key, value]) => (
-                <div key={key}>
-                  <label className="label">{key.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())}</label>
-                  <input type="number" className="input" value={value}
-                    onChange={(e) => setForm({ ...form, defaultRates: { ...form.defaultRates, [key]: Number(e.target.value) } })} />
-                </div>
-              ))}
+            <h3 className="font-semibold text-gray-800">Electricity Rate</h3>
+            <div><label className="label">Rate per Unit</label>
+              <input type="number" className="input" value={form.defaultRates.electricityRate}
+                onChange={(e) => setForm({ ...form, defaultRates: { ...form.defaultRates, electricityRate: Number(e.target.value) } })} />
+              <div className="text-[11px] text-gray-400 mt-1">Pre-fills the rate field in Bill Generator — still editable per invoice. Other charges (water, gas, security, etc.) are added directly on each bill via the searchable charge picker, not pre-configured here.</div>
             </div>
             <button onClick={save} className="btn-primary">Save Changes</button>
           </div>

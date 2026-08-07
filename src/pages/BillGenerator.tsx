@@ -10,6 +10,7 @@ import { Printer, Save, RotateCcw, Landmark, Plus, Trash2, MessageCircle, Messag
 import InvoiceGenerator from '@/pages/InvoiceGenerator';
 import ReceiptGenerator from '@/pages/ReceiptGenerator';
 import PaymentMethodSelect from '@/components/PaymentMethodSelect';
+import ChargeCombobox from '@/components/ChargeCombobox';
 import type { Bill, ChargeLine, Receipt } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -17,7 +18,6 @@ function addDaysISO(iso: string, days: number) {
   const d = new Date(iso); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10);
 }
 
-const defaultChargeLabels = ['Water Charge', 'Gas Charge', 'Lift Charge', 'Security Charge', 'Cleaning Charge', 'Internet Charge'];
 
 const tabs = [
   { key: 'bill', label: 'Bill Generator', icon: FileText },
@@ -71,20 +71,13 @@ function BillGeneratorForm() {
   const [taxRate, setTaxRate] = useState(0);
   const [penalty, setPenalty] = useState(0);
 
-  // Pull defaults from Settings (configured by the user) exactly once, instead
-  // of hardcoding amounts in the form itself.
+  // Pull electricity rate & tax rate defaults from Settings exactly once -
+  // charges themselves are no longer auto-populated; the person adds
+  // whichever charges actually apply to this bill via the combobox below.
   useEffect(() => {
     if (settings && !ratesInitialized) {
       setRate(settings.defaultRates.electricityRate);
       setTaxRate(settings.defaultTaxRate ?? 0);
-      setCharges([
-        { label: 'Water Charge', amount: settings.defaultRates.waterCharge },
-        { label: 'Gas Charge', amount: settings.defaultRates.gasCharge },
-        { label: 'Lift Charge', amount: settings.defaultRates.liftCharge },
-        { label: 'Security Charge', amount: settings.defaultRates.securityCharge },
-        { label: 'Cleaning Charge', amount: settings.defaultRates.cleaningCharge },
-        { label: 'Internet Charge', amount: settings.defaultRates.internetCharge },
-      ]);
       setRatesInitialized(true);
     }
   }, [settings, ratesInitialized]);
@@ -241,12 +234,7 @@ function BillGeneratorForm() {
           <div className="space-y-2">
             {charges.map((c, i) => (
               <div key={i} className="flex flex-wrap items-center gap-2">
-                <input
-                  className="input flex-1 min-w-[140px]"
-                  value={c.label}
-                  placeholder={defaultChargeLabels[i] ?? 'Charge label'}
-                  onChange={(e) => updateChargeLabel(i, e.target.value)}
-                />
+                <ChargeCombobox value={c.label} onChange={(v) => updateChargeLabel(i, v)} />
                 <input
                   type="number"
                   className="input w-24 sm:w-28"
@@ -257,7 +245,7 @@ function BillGeneratorForm() {
                 <button onClick={() => removeCharge(i)} className="icon-btn text-red-400 shrink-0"><Trash2 size={16} /></button>
               </div>
             ))}
-            {charges.length === 0 && <div className="text-xs text-gray-400">No charges added yet — click "Add Charge".</div>}
+            {charges.length === 0 && <div className="text-xs text-gray-400">No charges added yet — click "Add Charge" to search common charges or enter a custom one.</div>}
           </div>
           <div className="text-xs text-gray-400">Charges left at 0 are automatically excluded from the invoice.</div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
