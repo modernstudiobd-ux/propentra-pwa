@@ -3,7 +3,6 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { X, Printer, Landmark } from 'lucide-react';
 import { money, dateLabel, numberToWords } from '@/lib/format';
-import { currencyState } from '@/lib/currency';
 import { printNode } from '@/lib/printUtil';
 import type { Bill, Building, Flat, Resident } from '@/types';
 
@@ -39,10 +38,7 @@ export default function InvoiceViewModal({
                 {settings?.taxId && <div className="text-xs text-gray-400">Tax ID / BIN: {settings.taxId}</div>}
               </div>
             </div>
-            <div className="text-right">
-              <span className="bg-brand-50 text-brand-700 px-3 py-1 rounded-full text-xs font-semibold">INVOICE</span>
-              <div className="text-[10px] text-gray-400 mt-1">Currency: {currencyState.name} ({currencyState.symbol})</div>
-            </div>
+            <span className="bg-brand-50 text-brand-700 px-3 py-1 rounded-full text-xs font-semibold">INVOICE</span>
           </div>
 
           <div className="grid grid-cols-2 gap-4 text-sm mb-4">
