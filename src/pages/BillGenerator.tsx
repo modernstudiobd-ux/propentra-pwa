@@ -95,7 +95,13 @@ function BillGeneratorForm() {
   const printRef = useRef<HTMLDivElement>(null);
 
   const buildingFlats = flats.filter((f) => f.buildingId === buildingId);
-  const flatResidents = residents.filter((r) => r.flatId === flatId);
+  const flatResidents = residents
+    .filter((r) => r.flatId === flatId)
+    .sort((a, b) => {
+      const aScore = (a.isBillingContact ?? true ? 0 : 1) + ((a.status ?? 'current') === 'current' ? 0 : 2);
+      const bScore = (b.isBillingContact ?? true ? 0 : 1) + ((b.status ?? 'current') === 'current' ? 0 : 2);
+      return aScore - bScore;
+    });
 
   const units = Math.max(0, currReading - prevReading);
   const electricityAmount = units * rate;
@@ -186,7 +192,13 @@ function BillGeneratorForm() {
                 {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select></div>
             <div><label className="label">Flat / Apartment</label>
-              <select className="input" value={flatId} onChange={(e) => { setFlatId(Number(e.target.value)); setResidentId(''); }} disabled={!buildingId}>
+              <select className="input" value={flatId} onChange={(e) => {
+                const fId = Number(e.target.value);
+                setFlatId(fId); setResidentId('');
+                const flatResList = residents.filter((r) => r.flatId === fId);
+                const contact = flatResList.find((r) => (r.isBillingContact ?? true) && (r.status ?? 'current') === 'current') ?? flatResList[0];
+                if (contact?.id) setResidentId(contact.id);
+              }} disabled={!buildingId}>
                 <option value="">Select flat</option>
                 {buildingFlats.map((f) => <option key={f.id} value={f.id}>{f.unitNo}</option>)}
               </select></div>
@@ -194,7 +206,11 @@ function BillGeneratorForm() {
           <div><label className="label">Resident (Tenant / Flat Owner)</label>
             <select className="input" value={residentId} onChange={(e) => setResidentId(Number(e.target.value))} disabled={!flatId}>
               <option value="">Select resident</option>
-              {flatResidents.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.type === 'Owner' ? 'Flat Owner' : 'Tenant'})</option>)}
+              {flatResidents.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name} ({r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}){(r.status ?? 'current') === 'former' ? ' — Former' : ''}
+                </option>
+              ))}
             </select></div>
 
           <h3 className="font-semibold text-gray-800 pt-2">2. Billing Period</h3>

@@ -95,6 +95,7 @@ export default function SetupWizard({ onFinish }: { onFinish: () => void }) {
       await db.residents.add({
         name: residentName, mobile: residentMobile, email: '',
         flatId: createdFlatId, buildingId: createdBuildingId, unitLabel: flat?.unitNo ?? unitNo, type: residentType,
+        status: 'current', moveInDate: new Date().toISOString().slice(0, 10), isBillingContact: true,
       });
       await db.flats.update(createdFlatId, { status: 'occupied' });
     }

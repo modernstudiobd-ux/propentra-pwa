@@ -15,6 +15,8 @@ export interface Flat {
 
 export type ResidentType = 'Tenant' | 'Owner';
 
+export type ResidentStatus = 'current' | 'former';
+
 export interface Resident {
   id?: number;
   name: string;
@@ -24,6 +26,10 @@ export interface Resident {
   buildingId: number;
   unitLabel: string; // denormalized e.g. "A-3"
   type: ResidentType;
+  status: ResidentStatus;
+  moveInDate?: string; // ISO date
+  moveOutDate?: string; // ISO date - only set once status is 'former'
+  isBillingContact: boolean; // who bills default to when a flat has multiple current residents
 }
 
 export interface ChargeLine {

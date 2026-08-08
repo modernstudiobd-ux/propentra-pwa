@@ -4,7 +4,18 @@ import { db } from '@/lib/db';
 import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Modal from '@/components/Modal';
-import type { Resident, ResidentType } from '@/types';
+import { dateLabel } from '@/lib/format';
+import type { Resident, ResidentType, ResidentStatus } from '@/types';
+
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+
+const emptyForm = (flats: { id?: number; buildingId: number; unitNo: string }[]): Resident => {
+  const f = flats[0];
+  return {
+    name: '', mobile: '', email: '', flatId: f?.id ?? 0, buildingId: f?.buildingId ?? 0, unitLabel: f?.unitNo ?? '',
+    type: 'Tenant', status: 'current', moveInDate: todayISO(), moveOutDate: '', isBillingContact: true,
+  };
+};
 
 export default function Residents() {
   const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
@@ -12,25 +23,26 @@ export default function Residents() {
   const buildings = useLiveQuery(() => db.buildings.toArray(), []) ?? [];
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | ResidentType>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | ResidentStatus>('current');
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<Resident>({
-    name: '', mobile: '', email: '', flatId: flats[0]?.id ?? 0, buildingId: flats[0]?.buildingId ?? 0,
-    unitLabel: flats[0]?.unitNo ?? '', type: 'Tenant',
-  });
+  const [form, setForm] = useState<Resident>(emptyForm([]));
 
   const buildingName = (id: number) => buildings.find((b) => b.id === id)?.name ?? '—';
+  // Existing data from before this feature won't have status/isBillingContact set - default sensibly.
+  const statusOf = (r: Resident): ResidentStatus => r.status ?? 'current';
+  const isBillingContactOf = (r: Resident): boolean => r.isBillingContact ?? true;
 
   const filtered = residents.filter((r) =>
     (typeFilter === 'all' || r.type === typeFilter) &&
+    (statusFilter === 'all' || statusOf(r) === statusFilter) &&
     (r.name.toLowerCase().includes(query.toLowerCase()) || r.email.toLowerCase().includes(query.toLowerCase()))
   );
 
-  function openAdd() {
-    const f = flats[0];
-    setForm({ name: '', mobile: '', email: '', flatId: f?.id ?? 0, buildingId: f?.buildingId ?? 0, unitLabel: f?.unitNo ?? '', type: 'Tenant' });
+  function openAdd() { setForm(emptyForm(flats)); setOpen(true); }
+  function openEdit(r: Resident) {
+    setForm({ ...r, status: statusOf(r), isBillingContact: isBillingContactOf(r), moveInDate: r.moveInDate ?? '', moveOutDate: r.moveOutDate ?? '' });
     setOpen(true);
   }
-  function openEdit(r: Resident) { setForm(r); setOpen(true); }
 
   function onFlatChange(flatId: number) {
     const f = flats.find((x) => x.id === flatId);
@@ -39,6 +51,12 @@ export default function Residents() {
 
   async function save() {
     if (!form.name.trim()) return;
+    // Only one billing contact per flat - unmark any other current billing
+    // contact on the same flat when this one is set as the contact.
+    if (form.isBillingContact) {
+      const others = residents.filter((r) => r.flatId === form.flatId && r.id !== form.id && isBillingContactOf(r));
+      await Promise.all(others.map((r) => r.id && db.residents.update(r.id, { isBillingContact: false })));
+    }
     if (form.id) await db.residents.update(form.id, form);
     else await db.residents.add(form);
     setOpen(false);
@@ -46,7 +64,7 @@ export default function Residents() {
 
   async function remove(id?: number) {
     if (!id) return;
-    if (!confirm('Delete this resident?')) return;
+    if (!confirm('Delete this resident? Their billing/payment history will remain but no longer link to a name.')) return;
     await db.residents.delete(id);
   }
 
@@ -58,6 +76,11 @@ export default function Residents() {
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search residents..." className="input pl-9" />
           </div>
+          <select className="input sm:w-36" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
+            <option value="current">Current</option>
+            <option value="former">Former</option>
+            <option value="all">All</option>
+          </select>
           <select className="input sm:w-40" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as any)}>
             <option value="all">All Types</option>
             <option value="Tenant">Tenant</option>
@@ -83,10 +106,10 @@ export default function Residents() {
 
       <div className="card overflow-hidden">
         <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full min-w-[750px]">
+          <table className="w-full min-w-[850px]">
             <thead className="bg-gray-50">
               <tr>
-                <th className="table-th">#</th><th className="table-th">Resident Name</th><th className="table-th">Type</th>
+                <th className="table-th">#</th><th className="table-th">Resident Name</th><th className="table-th">Type</th><th className="table-th">Status</th>
                 <th className="table-th">Mobile</th><th className="table-th">Email</th><th className="table-th">Flat</th>
                 <th className="table-th text-right">Action</th>
               </tr>
@@ -95,9 +118,19 @@ export default function Residents() {
               {filtered.map((r, i) => (
                 <tr key={r.id}>
                   <td className="table-td">{i + 1}</td>
-                  <td className="table-td font-medium text-gray-800">{r.name}</td>
+                  <td className="table-td font-medium text-gray-800">
+                    {r.name}
+                    {isBillingContactOf(r) && statusOf(r) === 'current' && (
+                      <span className="ml-2 text-[10px] text-brand-500 font-normal align-middle">● billed</span>
+                    )}
+                  </td>
                   <td className="table-td">
                     <span className={r.type === 'Owner' ? 'badge-partial' : 'badge-paid'}>{r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}</span>
+                  </td>
+                  <td className="table-td">
+                    <span className={statusOf(r) === 'current' ? 'badge-paid' : 'badge-unpaid'}>{statusOf(r) === 'current' ? 'Current' : 'Former'}</span>
+                    {statusOf(r) === 'former' && r.moveOutDate && <div className="text-[10px] text-gray-400 mt-0.5">Moved out {dateLabel(r.moveOutDate)}</div>}
+                    {statusOf(r) === 'current' && r.moveInDate && <div className="text-[10px] text-gray-400 mt-0.5">Since {dateLabel(r.moveInDate)}</div>}
                   </td>
                   <td className="table-td">{r.mobile || '—'}</td>
                   <td className="table-td">{r.email || '—'}</td>
@@ -109,7 +142,7 @@ export default function Residents() {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={7} className="text-center text-sm text-gray-400 py-8">No residents found</td></tr>
+                <tr><td colSpan={8} className="text-center text-sm text-gray-400 py-8">No residents found</td></tr>
               )}
             </tbody>
           </table>
@@ -123,9 +156,12 @@ export default function Residents() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium text-gray-800">{r.name}</span>
                   <span className={r.type === 'Owner' ? 'badge-partial' : 'badge-paid'}>{r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}</span>
+                  <span className={statusOf(r) === 'current' ? 'badge-paid' : 'badge-unpaid'}>{statusOf(r) === 'current' ? 'Current' : 'Former'}</span>
                 </div>
                 <div className="text-sm text-gray-500 mt-0.5">{buildingName(r.buildingId)} · {r.unitLabel}</div>
                 <div className="text-xs text-gray-400 mt-1">{r.mobile || '—'} · {r.email || '—'}</div>
+                {statusOf(r) === 'former' && r.moveOutDate && <div className="text-[10px] text-gray-400 mt-0.5">Moved out {dateLabel(r.moveOutDate)}</div>}
+                {statusOf(r) === 'current' && r.moveInDate && <div className="text-[10px] text-gray-400 mt-0.5">Since {dateLabel(r.moveInDate)}</div>}
               </div>
               <div className="flex items-center shrink-0 gap-1">
                 <button onClick={() => openEdit(r)} className="icon-btn text-brand-500"><Pencil size={18} /></button>
@@ -158,6 +194,29 @@ export default function Residents() {
             <select className="input" value={form.flatId} onChange={(e) => onFlatChange(Number(e.target.value))}>
               {flats.map((f) => <option key={f.id} value={f.id}>{buildingName(f.buildingId)} · {f.unitNo}</option>)}
             </select></div>
+
+          <div className="grid grid-cols-2 gap-3 pt-1 border-t border-gray-100">
+            <div className="pt-3"><label className="label">Status</label>
+              <select className="input" value={form.status} onChange={(e) => {
+                const status = e.target.value as ResidentStatus;
+                setForm({ ...form, status, moveOutDate: status === 'former' ? (form.moveOutDate || todayISO()) : '' });
+              }}>
+                <option value="current">Current</option>
+                <option value="former">Former</option>
+              </select></div>
+            <div className="pt-3"><label className="label">Move-in Date</label>
+              <input type="date" className="input" value={form.moveInDate ?? ''} onChange={(e) => setForm({ ...form, moveInDate: e.target.value })} /></div>
+          </div>
+          {form.status === 'former' && (
+            <div><label className="label">Move-out Date</label>
+              <input type="date" className="input" value={form.moveOutDate ?? ''} onChange={(e) => setForm({ ...form, moveOutDate: e.target.value })} /></div>
+          )}
+          <label className="flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" checked={form.isBillingContact} onChange={(e) => setForm({ ...form, isBillingContact: e.target.checked })} />
+            Bill this resident by default for this flat
+          </label>
+          <div className="text-[11px] text-gray-400 -mt-2">Only one resident per flat can be the default billing contact — marking this one will unmark any other.</div>
+
           <div className="flex gap-2 pt-2">
             <button onClick={save} className="btn-primary flex-1">Save</button>
             <button onClick={() => setOpen(false)} className="btn-secondary flex-1">Cancel</button>
