@@ -85,7 +85,7 @@ export default function Maintenance() {
           </select>
         </div>
         <button onClick={openAdd} className="btn-primary flex items-center gap-2 justify-center shrink-0" disabled={buildings.length === 0}>
-          <Plus size={16} /> Add Request
+          <Plus size={16} /> Log Maintenance
         </button>
       </div>
 
@@ -101,7 +101,7 @@ export default function Maintenance() {
                   <span className={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</span>
                 </div>
                 <div className="text-xs text-gray-400 mt-0.5">
-                  {buildingName(r.buildingId)}{flatLabel(r.flatId) ? ` · Flat ${flatLabel(r.flatId)}` : ''} · Reported {dateLabel(r.reportedDate)}
+                  {buildingName(r.buildingId)}{flatLabel(r.flatId) ? ` · Flat ${flatLabel(r.flatId)}` : ''} · {dateLabel(r.reportedDate)}
                   {r.vendorName ? ` · ${r.vendorName}` : ''}
                 </div>
                 {r.description && <div className="text-xs text-gray-500 mt-1">{r.description}</div>}
@@ -117,7 +117,7 @@ export default function Maintenance() {
         {filtered.length === 0 && <div className="p-8 text-center text-sm text-gray-400">No maintenance records found</div>}
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'Edit Maintenance Request' : 'Add Maintenance Request'}>
+      <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'Edit Maintenance Entry' : 'Log Maintenance'}>
         <div className="space-y-3">
           <div><label className="label">Title *</label>
             <input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Leaking pipe in kitchen" /></div>
@@ -153,7 +153,7 @@ export default function Maintenance() {
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label">Cost</label>
               <input type="number" className="input" value={form.cost || ''} placeholder="0" onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} /></div>
-            <div><label className="label">Reported Date</label>
+            <div><label className="label">Date</label>
               <input type="date" className="input" value={form.reportedDate} onChange={(e) => setForm({ ...form, reportedDate: e.target.value })} /></div>
           </div>
           {form.status === 'completed' && (

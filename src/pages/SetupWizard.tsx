@@ -156,9 +156,9 @@ export default function SetupWizard({ onFinish }: { onFinish: () => void }) {
 
           {step === 1 && (
             <div className="space-y-3">
-              <StepHeader icon={Landmark} title="Your Company / Portfolio" subtitle="Shown on every invoice and receipt you generate." />
-              <div><label className="label">Company or Building Manager Name</label>
-                <input className="input" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="e.g. Green Tower Management" /></div>
+              <StepHeader icon={Landmark} title="Landlord / Company Information" subtitle="Shown on every invoice and receipt you generate." />
+              <div><label className="label">Company, Landlord or Building Manager Name</label>
+                <input className="input" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="e.g. Green Tower Management, or your own name" /></div>
               <div><label className="label">Address</label>
                 <textarea className="input" rows={2} value={address} onChange={(e) => setAddress(e.target.value)} /></div>
               <div className="grid grid-cols-2 gap-3">

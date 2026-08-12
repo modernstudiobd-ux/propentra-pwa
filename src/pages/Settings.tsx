@@ -7,7 +7,7 @@ import Modal from '@/components/Modal';
 import SignaturePad from '@/components/SignaturePad';
 
 const sections = [
-  { key: 'company', label: 'Company Info', icon: Building2 },
+  { key: 'company', label: 'Landlord / Company', icon: Building2 },
   { key: 'general', label: 'General Settings', icon: SlidersHorizontal },
   { key: 'invoice', label: 'Invoice Settings', icon: FileText },
   { key: 'receipt', label: 'Receipt Settings', icon: Receipt },
@@ -83,8 +83,8 @@ export default function SettingsPage() {
       <div className="card p-5 md:col-span-3">
         {section === 'company' && (
           <div className="space-y-4 max-w-lg">
-            <h3 className="font-semibold text-gray-800">Company Information</h3>
-            <div><label className="label">Company / Building Name</label>
+            <h3 className="font-semibold text-gray-800">Landlord / Company Information</h3>
+            <div><label className="label">Company, Landlord or Building Manager Name</label>
               <input className="input" value={form.companyName} onChange={(e) => setForm({ ...form, companyName: e.target.value })} /></div>
             <div><label className="label">Address</label>
               <textarea className="input" rows={2} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
