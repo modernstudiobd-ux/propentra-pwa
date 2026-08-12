@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel } from '@/lib/format';
-import { Search, Plus, Trash2 } from 'lucide-react';
+import { Search, Plus, Ban, Eye, EyeOff } from 'lucide-react';
 import Modal from '@/components/Modal';
 import PaymentMethodSelect from '@/components/PaymentMethodSelect';
-import { recordPaymentForBill, removePayment } from '@/lib/billing';
+import { recordPaymentForBill, voidPayment, isDuplicatePayment } from '@/lib/billing';
 import type { Bill } from '@/types';
 
 export default function Payments() {
@@ -15,6 +15,7 @@ export default function Payments() {
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
   const settings = useLiveQuery(() => db.settings.toCollection().first(), []);
   const [query, setQuery] = useState('');
+  const [showVoided, setShowVoided] = useState(false);
 
   const [open, setOpen] = useState(false);
   const [invoiceQuery, setInvoiceQuery] = useState('');
@@ -26,10 +27,12 @@ export default function Payments() {
   const flatLabel = (id: number) => flats.find((f) => f.id === id)?.unitNo ?? '—';
   const invoiceNo = (id: number) => bills.find((b) => b.id === id)?.invoiceNo ?? '—';
 
-  const filtered = payments.filter((p) =>
-    residentName(p.residentId).toLowerCase().includes(query.toLowerCase()) || invoiceNo(p.invoiceId).toLowerCase().includes(query.toLowerCase())
-  );
-  const total = filtered.reduce((s, p) => s + p.amount, 0);
+  const filtered = payments
+    .filter((p) => showVoided || !p.voided)
+    .filter((p) =>
+      residentName(p.residentId).toLowerCase().includes(query.toLowerCase()) || invoiceNo(p.invoiceId).toLowerCase().includes(query.toLowerCase())
+    );
+  const total = filtered.filter((p) => !p.voided).reduce((s, p) => s + p.amount, 0);
 
   const outstandingBills = bills.filter((b) => b.status !== 'paid').filter((b) =>
     b.invoiceNo.toLowerCase().includes(invoiceQuery.toLowerCase()) || residentName(b.residentId).toLowerCase().includes(invoiceQuery.toLowerCase())
@@ -48,32 +51,46 @@ export default function Payments() {
 
   async function savePayment() {
     if (!selectedBill || amount <= 0) return;
-    await recordPaymentForBill(selectedBill, amount, method);
-    setOpen(false);
+    if (await isDuplicatePayment(selectedBill, amount, method)) {
+      if (!confirm('A payment of this exact amount and method was already recorded today for this invoice. Record another one anyway?')) return;
+    }
+    try {
+      await recordPaymentForBill(selectedBill, amount, method);
+      setOpen(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not record payment.');
+    }
   }
 
-  async function remove(paymentId?: number) {
+  async function handleVoid(paymentId?: number) {
     const payment = payments.find((p) => p.id === paymentId);
     if (!payment) return;
-    if (!confirm('Remove this payment? The linked invoice balance will be restored.')) return;
-    await removePayment(payment);
+    const reason = prompt('Reason for voiding this payment (e.g. "entered by mistake", "wrong amount"):');
+    if (reason === null) return; // cancelled
+    if (!reason.trim()) { alert('A reason is required to void a payment.'); return; }
+    await voidPayment(payment, reason.trim());
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="relative w-full sm:max-w-xs">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search payments..." className="input pl-9" />
         </div>
-        <button onClick={openAdd} className="btn-primary flex items-center gap-2 shrink-0">
-          <Plus size={16} /> Add Payment
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowVoided((v) => !v)} className="btn-secondary flex items-center gap-2 text-xs shrink-0">
+            {showVoided ? <EyeOff size={14} /> : <Eye size={14} />} {showVoided ? 'Hide voided' : 'Show voided'}
+          </button>
+          <button onClick={openAdd} className="btn-primary flex items-center gap-2 shrink-0">
+            <Plus size={16} /> Add Payment
+          </button>
+        </div>
       </div>
 
       <div className="card overflow-hidden">
         <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full min-w-[750px]">
+          <table className="w-full min-w-[800px]">
             <thead className="bg-gray-50">
               <tr>
                 <th className="table-th">#</th><th className="table-th">Date</th><th className="table-th">Invoice #</th>
@@ -83,7 +100,7 @@ export default function Payments() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filtered.map((p, i) => (
-                <tr key={p.id}>
+                <tr key={p.id} className={p.voided ? 'opacity-50' : ''}>
                   <td className="table-td">{i + 1}</td>
                   <td className="table-td">{dateLabel(p.date)}</td>
                   <td className="table-td font-medium text-gray-800">{invoiceNo(p.invoiceId)}</td>
@@ -91,10 +108,16 @@ export default function Payments() {
                   <td className="table-td">{p.method}</td>
                   <td className="table-td">{money(p.amount)}</td>
                   <td className="table-td">
-                    <span className={p.type === 'Full' ? 'badge-paid' : 'badge-partial'}>{p.type}</span>
+                    {p.voided ? (
+                      <span className="badge-unpaid" title={p.voidReason}>Voided</span>
+                    ) : (
+                      <span className={p.type === 'Full' ? 'badge-paid' : 'badge-partial'}>{p.type}</span>
+                    )}
                   </td>
                   <td className="table-td text-right">
-                    <button onClick={() => remove(p.id)} className="icon-btn text-red-400"><Trash2 size={16} /></button>
+                    {!p.voided && (
+                      <button onClick={() => handleVoid(p.id)} className="icon-btn text-red-400" title="Void this payment"><Ban size={16} /></button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -106,18 +129,18 @@ export default function Payments() {
         {/* Mobile card list */}
         <div className="sm:hidden divide-y divide-gray-100">
           {filtered.map((p) => (
-            <div key={p.id} className="p-4 flex items-start justify-between gap-3">
+            <div key={p.id} className={`p-4 flex items-start justify-between gap-3 ${p.voided ? 'opacity-50' : ''}`}>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium text-gray-800">{invoiceNo(p.invoiceId)}</span>
-                  <span className={p.type === 'Full' ? 'badge-paid' : 'badge-partial'}>{p.type}</span>
+                  {p.voided ? <span className="badge-unpaid">Voided</span> : <span className={p.type === 'Full' ? 'badge-paid' : 'badge-partial'}>{p.type}</span>}
                 </div>
                 <div className="text-sm text-gray-500 mt-0.5">{residentName(p.residentId)} ({flatLabel(p.flatId)})</div>
                 <div className="text-xs text-gray-400 mt-1">{dateLabel(p.date)} · {p.method}</div>
               </div>
               <div className="flex items-center shrink-0 gap-2">
                 <span className="font-semibold text-gray-800 text-sm">{money(p.amount)}</span>
-                <button onClick={() => remove(p.id)} className="icon-btn text-red-400"><Trash2 size={18} /></button>
+                {!p.voided && <button onClick={() => handleVoid(p.id)} className="icon-btn text-red-400"><Ban size={18} /></button>}
               </div>
             </div>
           ))}
@@ -125,7 +148,7 @@ export default function Payments() {
         </div>
 
         <div className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100 flex justify-between">
-          <span>Total: {filtered.length} payments</span>
+          <span>Total: {filtered.length} payments{showVoided ? ' (including voided)' : ''}</span>
           <span className="font-semibold text-gray-700">Total Payments: {money(total)}</span>
         </div>
       </div>

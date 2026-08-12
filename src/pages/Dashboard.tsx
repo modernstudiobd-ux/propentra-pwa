@@ -5,12 +5,18 @@ import { money, moneyCompact, dateLabel } from '@/lib/format';
 import {
   Building2, Home, Users, FileWarning, Wallet, Eye,
   FileText, Receipt, UserPlus, Layers, Plus, ChevronDown,
+  AlertTriangle, Wrench, BellRing, FolderOpen, PiggyBank, CheckCircle2, ChevronRight,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Link, useNavigate } from 'react-router-dom';
 import InvoiceViewModal from '@/components/InvoiceViewModal';
 import MiniCalendar from '@/components/MiniCalendar';
 import type { Bill } from '@/types';
+
+function todayISO() { return new Date().toISOString().slice(0, 10); }
+function daysUntil(iso: string) {
+  return Math.ceil((new Date(iso).getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000);
+}
 
 function StatCard({ icon: Icon, label, value, sub, bg, fg, title }: any) {
   return (
@@ -34,6 +40,11 @@ export default function Dashboard() {
   const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
   const allBills = useLiveQuery(() => db.bills.orderBy('id').reverse().toArray(), []) ?? [];
   const receipts = useLiveQuery(() => db.receipts.orderBy('id').reverse().toArray(), []) ?? [];
+  const maintenance = useLiveQuery(() => db.maintenanceRequests.toArray(), []) ?? [];
+  const expenses = useLiveQuery(() => db.expenses.toArray(), []) ?? [];
+  const reminders = useLiveQuery(() => db.reminders.toArray(), []) ?? [];
+  const documents = useLiveQuery(() => db.documents.toArray(), []) ?? [];
+  const depositTxns = useLiveQuery(() => db.depositTransactions.toArray(), []) ?? [];
 
   const [buildingFilter, setBuildingFilter] = useState<number | 'all'>('all');
   const [monthFilter, setMonthFilter] = useState<'all' | string>('all');
@@ -80,6 +91,36 @@ export default function Dashboard() {
   const buildingName = (id: number) => buildings.find((b) => b.id === id)?.name ?? '—';
   const flatLabel = (id: number) => flats.find((f) => f.id === id)?.unitNo ?? '—';
   const residentName = (id: number) => residents.find((r) => r.id === id)?.name ?? '—';
+
+  const inScope = (buildingId?: number) => buildingFilter === 'all' || buildingId === buildingFilter;
+  const today = todayISO();
+  const thisMonthKey = today.slice(0, 7);
+
+  const overdueBills = allBills.filter((b) => inScope(b.buildingId) && b.status !== 'paid' && b.dueDate < today);
+  const overdueTotal = overdueBills.reduce((s, b) => s + (b.totalAmount - b.paidAmount), 0);
+
+  const urgentMaintenance = maintenance.filter((m) =>
+    inScope(m.buildingId) && (m.status === 'open' || m.status === 'in_progress') && (m.priority === 'high' || m.priority === 'urgent')
+  );
+
+  const dueReminders = reminders.filter((r) => inScope(r.buildingId) && r.status === 'pending' && r.dueDate <= today);
+
+  const expiringDocs = documents.filter((d) => inScope(d.buildingId) && d.expiryDate && daysUntil(d.expiryDate) <= 30);
+
+  const expiringIds = residents.filter((r) =>
+    inScope(r.buildingId) && (r.status ?? 'current') === 'current' && r.idExpiryDate && daysUntil(r.idExpiryDate) <= 30
+  );
+
+  const thisMonthExpenses = expenses.filter((e) => inScope(e.buildingId) && e.date.startsWith(thisMonthKey)).reduce((s, e) => s + e.amount, 0);
+
+  const depositsHeld = depositTxns.filter((t) => inScope(t.buildingId) && !t.voided).reduce((s, t) => {
+    if (t.type === 'collected') return s + t.amount;
+    if (t.type === 'applied' || t.type === 'refunded') return s - t.amount;
+    if (t.type === 'adjustment') return s + t.amount;
+    return s;
+  }, 0);
+
+  const alertCount = overdueBills.length + urgentMaintenance.length + dueReminders.length + expiringDocs.length + expiringIds.length;
 
   const newActions = [
     { label: 'Generate Bill', icon: FileText, to: '/billing/generator' },
@@ -128,6 +169,58 @@ export default function Dashboard() {
         <StatCard icon={Users} label="Residents" value={residentsInScope.length} bg="#ede9fe" fg="#7c3aed" />
         <StatCard icon={FileWarning} label="Unpaid" value={unpaidBills.length} sub={moneyCompact(unpaidTotal)} title={money(unpaidTotal)} bg="#ffedd5" fg="#ea580c" />
         <StatCard icon={Wallet} label="Collection" value={moneyCompact(collected)} title={money(collected)} sub={monthFilter === 'all' ? 'All time' : monthFilter} bg="#ccfbf1" fg="#0d9488" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <StatCard icon={Wallet} label="Expenses (this month)" value={moneyCompact(thisMonthExpenses)} title={money(thisMonthExpenses)} bg="#f1f5f9" fg="#64748b" />
+        <StatCard icon={PiggyBank} label="Deposits Held" value={moneyCompact(depositsHeld)} title={money(depositsHeld)} bg="#ccfbf1" fg="#0d9488" />
+      </div>
+
+      <div className="card p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+            <AlertTriangle size={16} className={alertCount > 0 ? 'text-amber-500' : 'text-emerald-500'} /> Alerts
+          </h3>
+          {alertCount > 0 && <span className="badge-unpaid">{alertCount} need{alertCount === 1 ? 's' : ''} attention</span>}
+        </div>
+        {alertCount === 0 ? (
+          <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+            <CheckCircle2 size={16} className="text-emerald-500" /> All caught up — nothing needs attention right now.
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {overdueBills.length > 0 && (
+              <Link to="/billing/history" className="flex items-center justify-between py-2.5 group">
+                <span className="flex items-center gap-2 text-sm text-gray-700"><FileWarning size={15} className="text-red-500" /> {overdueBills.length} overdue invoice{overdueBills.length !== 1 ? 's' : ''}</span>
+                <span className="flex items-center gap-1 text-xs text-gray-400 group-hover:text-brand-500">{money(overdueTotal)} <ChevronRight size={14} /></span>
+              </Link>
+            )}
+            {urgentMaintenance.length > 0 && (
+              <Link to="/maintenance" className="flex items-center justify-between py-2.5 group">
+                <span className="flex items-center gap-2 text-sm text-gray-700"><Wrench size={15} className="text-amber-500" /> {urgentMaintenance.length} high-priority maintenance request{urgentMaintenance.length !== 1 ? 's' : ''}</span>
+                <ChevronRight size={14} className="text-gray-400 group-hover:text-brand-500" />
+              </Link>
+            )}
+            {dueReminders.length > 0 && (
+              <Link to="/reminders" className="flex items-center justify-between py-2.5 group">
+                <span className="flex items-center gap-2 text-sm text-gray-700"><BellRing size={15} className="text-brand-500" /> {dueReminders.length} reminder{dueReminders.length !== 1 ? 's' : ''} due</span>
+                <ChevronRight size={14} className="text-gray-400 group-hover:text-brand-500" />
+              </Link>
+            )}
+            {expiringDocs.length > 0 && (
+              <Link to="/documents" className="flex items-center justify-between py-2.5 group">
+                <span className="flex items-center gap-2 text-sm text-gray-700"><FolderOpen size={15} className="text-amber-500" /> {expiringDocs.length} document{expiringDocs.length !== 1 ? 's' : ''} expiring within 30 days</span>
+                <ChevronRight size={14} className="text-gray-400 group-hover:text-brand-500" />
+              </Link>
+            )}
+            {expiringIds.length > 0 && (
+              <Link to="/residents" className="flex items-center justify-between py-2.5 group">
+                <span className="flex items-center gap-2 text-sm text-gray-700"><FileWarning size={15} className="text-amber-500" /> {expiringIds.length} resident ID{expiringIds.length !== 1 ? 's' : ''} expiring or expired</span>
+                <ChevronRight size={14} className="text-gray-400 group-hover:text-brand-500" />
+              </Link>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">

@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel, numberToWords } from '@/lib/format';
 import { Search, Receipt as ReceiptIcon, Eye, Printer, Save } from 'lucide-react';
-import { recordPaymentForBill } from '@/lib/billing';
+import { recordPaymentForBill, isDuplicatePayment } from '@/lib/billing';
 import ReceiptViewModal from '@/components/ReceiptViewModal';
 import PaymentMethodSelect from '@/components/PaymentMethodSelect';
 import type { Bill, Receipt } from '@/types';
@@ -41,10 +41,17 @@ export default function ReceiptGenerator() {
 
   async function generateReceipt() {
     if (!selectedBill || amount <= 0) return;
-    const { receipt } = await recordPaymentForBill(selectedBill, amount, method);
-    setViewReceipt(receipt);
-    setSelectedBillId(null);
-    setAmount(0);
+    if (await isDuplicatePayment(selectedBill, amount, method)) {
+      if (!confirm('A payment of this exact amount and method was already recorded today for this invoice. Record another one anyway?')) return;
+    }
+    try {
+      const { receipt } = await recordPaymentForBill(selectedBill, amount, method);
+      setViewReceipt(receipt);
+      setSelectedBillId(null);
+      setAmount(0);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not record payment.');
+    }
   }
 
   return (

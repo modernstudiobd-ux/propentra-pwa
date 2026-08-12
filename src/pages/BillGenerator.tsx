@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel, numberToWords } from '@/lib/format';
-import { genInvoiceNo, recordPaymentForBill } from '@/lib/billing';
+import { genInvoiceNo, recordPaymentForBill, isDuplicatePayment } from '@/lib/billing';
 import { buildInvoiceMessage, buildReceiptMessage, whatsappLink, smsLink } from '@/lib/messaging';
 import { printNode } from '@/lib/printUtil';
 import { Printer, Save, RotateCcw, Landmark, Plus, Trash2, MessageCircle, MessageSquare, FileText, Receipt as ReceiptIcon } from 'lucide-react';
@@ -165,10 +165,17 @@ function BillGeneratorForm() {
 
   async function recordPayment() {
     if (!generatedBill) return;
-    const { newPaid, status, receipt } = await recordPaymentForBill(generatedBill, receiptAmount, receiptMethod);
-    setShowReceiptForm(false);
-    setGeneratedBill({ ...generatedBill, paidAmount: newPaid, status });
-    setLastReceipt(receipt);
+    if (await isDuplicatePayment(generatedBill, receiptAmount, receiptMethod)) {
+      if (!confirm('A payment of this exact amount and method was already recorded today for this invoice. Record another one anyway?')) return;
+    }
+    try {
+      const { newPaid, status, receipt } = await recordPaymentForBill(generatedBill, receiptAmount, receiptMethod);
+      setShowReceiptForm(false);
+      setGeneratedBill({ ...generatedBill, paidAmount: newPaid, status });
+      setLastReceipt(receipt);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not record payment.');
+    }
   }
 
   const building = buildings.find((b) => b.id === (generatedBill?.buildingId ?? buildingId));

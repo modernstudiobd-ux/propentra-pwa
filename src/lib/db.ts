@@ -1,5 +1,8 @@
 import Dexie, { type Table } from 'dexie';
-import type { Building, Flat, Resident, Bill, Receipt, Payment, CompanySettings } from '@/types';
+import type {
+  Building, Flat, Resident, Bill, Receipt, Payment, CompanySettings,
+  DepositTransaction, MaintenanceRequest, Expense, Reminder, DocumentRecord,
+} from '@/types';
 
 export class BuildingBillDB extends Dexie {
   buildings!: Table<Building, number>;
@@ -9,6 +12,11 @@ export class BuildingBillDB extends Dexie {
   receipts!: Table<Receipt, number>;
   payments!: Table<Payment, number>;
   settings!: Table<CompanySettings, number>;
+  depositTransactions!: Table<DepositTransaction, number>;
+  maintenanceRequests!: Table<MaintenanceRequest, number>;
+  expenses!: Table<Expense, number>;
+  reminders!: Table<Reminder, number>;
+  documents!: Table<DocumentRecord, number>;
 
   constructor() {
     super('buildingbill-db');
@@ -24,13 +32,12 @@ export class BuildingBillDB extends Dexie {
       settings: '++id',
     });
 
-    // v2: "Tenants" renamed to "Residents" (with Tenant/Owner type). Existing
-    // local data is migrated automatically — nothing is lost on update.
+    // v2: "Tenants" renamed to "Residents" (with Tenant/Owner type).
     this.version(2)
       .stores({
         buildings: '++id, name',
         flats: '++id, buildingId, unitNo, status',
-        tenants: null, // drop old store
+        tenants: null,
         residents: '++id, name, buildingId, flatId, type',
         bills: '++id, invoiceNo, buildingId, flatId, residentId, status, billingMonth',
         receipts: '++id, receiptNo, invoiceId, residentId',
@@ -42,27 +49,44 @@ export class BuildingBillDB extends Dexie {
         if (oldTenants.length) {
           await tx.table('residents').bulkAdd(
             oldTenants.map((t: any) => ({
-              name: t.name,
-              mobile: t.mobile,
-              email: t.email,
-              flatId: t.flatId,
-              buildingId: t.buildingId,
-              unitLabel: t.unitLabel,
-              type: 'Tenant',
+              name: t.name, mobile: t.mobile, email: t.email, flatId: t.flatId,
+              buildingId: t.buildingId, unitLabel: t.unitLabel, type: 'Tenant',
             }))
           );
         }
-        await tx.table('bills').toCollection().modify((b: any) => {
-          b.residentId = b.tenantId;
-          delete b.tenantId;
-        });
-        await tx.table('receipts').toCollection().modify((r: any) => {
-          r.residentId = r.tenantId;
-          delete r.tenantId;
+        await tx.table('bills').toCollection().modify((b: any) => { b.residentId = b.tenantId; delete b.tenantId; });
+        await tx.table('receipts').toCollection().modify((r: any) => { r.residentId = r.tenantId; delete r.tenantId; });
+        await tx.table('payments').toCollection().modify((p: any) => { p.residentId = p.tenantId; delete p.tenantId; });
+      });
+
+    // v3: adds deposit ledger, maintenance, expenses, reminders, documents;
+    // indexes resident status/voided flags; backfills existing records with
+    // safe defaults so nothing already saved is lost or left inconsistent.
+    this.version(3)
+      .stores({
+        buildings: '++id, name',
+        flats: '++id, buildingId, unitNo, status',
+        residents: '++id, name, buildingId, flatId, type, status',
+        bills: '++id, invoiceNo, buildingId, flatId, residentId, status, billingMonth',
+        receipts: '++id, receiptNo, invoiceId, residentId, voided',
+        payments: '++id, invoiceId, residentId, date, voided',
+        settings: '++id',
+        depositTransactions: '++id, residentId, buildingId, flatId, type, date',
+        maintenanceRequests: '++id, buildingId, flatId, status, priority, reportedDate',
+        expenses: '++id, buildingId, flatId, category, date',
+        reminders: '++id, dueDate, status, priority, linkType, linkId',
+        documents: '++id, linkType, linkId, buildingId, category, expiryDate',
+      })
+      .upgrade(async (tx) => {
+        await tx.table('residents').toCollection().modify((r: any) => {
+          if (!r.status) r.status = 'current';
+          if (r.isBillingContact === undefined) r.isBillingContact = true;
         });
         await tx.table('payments').toCollection().modify((p: any) => {
-          p.residentId = p.tenantId;
-          delete p.tenantId;
+          if (p.voided === undefined) p.voided = false;
+        });
+        await tx.table('receipts').toCollection().modify((r: any) => {
+          if (r.voided === undefined) r.voided = false;
         });
       });
   }

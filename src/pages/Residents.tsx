@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
-import { Plus, Pencil, Trash2, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, IdCard, Wallet, Building2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Modal from '@/components/Modal';
 import { dateLabel } from '@/lib/format';
+import { validateImageFile, fileToBase64 } from '@/lib/fileValidation';
 import type { Resident, ResidentType, ResidentStatus } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -14,6 +15,7 @@ const emptyForm = (flats: { id?: number; buildingId: number; unitNo: string }[])
   return {
     name: '', mobile: '', email: '', flatId: f?.id ?? 0, buildingId: f?.buildingId ?? 0, unitLabel: f?.unitNo ?? '',
     type: 'Tenant', status: 'current', moveInDate: todayISO(), moveOutDate: '', isBillingContact: true,
+    idType: '', idNumber: '', idIssueDate: '', idExpiryDate: '', idDocumentImage: '',
   };
 };
 
@@ -21,16 +23,26 @@ export default function Residents() {
   const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
   const buildings = useLiveQuery(() => db.buildings.toArray(), []) ?? [];
+  const depositTxns = useLiveQuery(() => db.depositTransactions.toArray(), []) ?? [];
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | ResidentType>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | ResidentStatus>('current');
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Resident>(emptyForm([]));
+  const [idFileError, setIdFileError] = useState('');
 
   const buildingName = (id: number) => buildings.find((b) => b.id === id)?.name ?? '—';
-  // Existing data from before this feature won't have status/isBillingContact set - default sensibly.
   const statusOf = (r: Resident): ResidentStatus => r.status ?? 'current';
   const isBillingContactOf = (r: Resident): boolean => r.isBillingContact ?? true;
+  const depositBalance = (residentId?: number) => {
+    if (!residentId) return 0;
+    return depositTxns.filter((t) => t.residentId === residentId && !t.voided).reduce((sum, t) => {
+      if (t.type === 'collected') return sum + t.amount;
+      if (t.type === 'applied' || t.type === 'refunded') return sum - t.amount;
+      if (t.type === 'adjustment') return sum + t.amount;
+      return sum;
+    }, 0);
+  };
 
   const filtered = residents.filter((r) =>
     (typeFilter === 'all' || r.type === typeFilter) &&
@@ -38,9 +50,22 @@ export default function Residents() {
     (r.name.toLowerCase().includes(query.toLowerCase()) || r.email.toLowerCase().includes(query.toLowerCase()))
   );
 
-  function openAdd() { setForm(emptyForm(flats)); setOpen(true); }
+  // Group filtered residents by flat, so multiple residents on one flat
+  // (owner + tenant, or resident history) are visually grouped together
+  // instead of scattered across an undifferentiated list.
+  const groups = flats
+    .map((f) => ({ flat: f, residents: filtered.filter((r) => r.flatId === f.id) }))
+    .filter((g) => g.residents.length > 0)
+    .sort((a, b) => buildingName(a.flat.buildingId).localeCompare(buildingName(b.flat.buildingId)) || a.flat.unitNo.localeCompare(b.flat.unitNo));
+
+  function openAdd() { setForm(emptyForm(flats)); setIdFileError(''); setOpen(true); }
   function openEdit(r: Resident) {
-    setForm({ ...r, status: statusOf(r), isBillingContact: isBillingContactOf(r), moveInDate: r.moveInDate ?? '', moveOutDate: r.moveOutDate ?? '' });
+    setForm({
+      ...r, status: statusOf(r), isBillingContact: isBillingContactOf(r),
+      moveInDate: r.moveInDate ?? '', moveOutDate: r.moveOutDate ?? '',
+      idType: r.idType ?? '', idNumber: r.idNumber ?? '', idIssueDate: r.idIssueDate ?? '', idExpiryDate: r.idExpiryDate ?? '',
+    });
+    setIdFileError('');
     setOpen(true);
   }
 
@@ -49,10 +74,36 @@ export default function Residents() {
     setForm({ ...form, flatId, buildingId: f?.buildingId ?? 0, unitLabel: f?.unitNo ?? '' });
   }
 
+  async function onIdFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const err = validateImageFile(file);
+    if (err) { setIdFileError(err); return; }
+    setIdFileError('');
+    const data = await fileToBase64(file);
+    setForm({ ...form, idDocumentImage: data });
+  }
+
   async function save() {
     if (!form.name.trim()) return;
-    // Only one billing contact per flat - unmark any other current billing
-    // contact on the same flat when this one is set as the contact.
+
+    if (form.idIssueDate && form.idExpiryDate && form.idExpiryDate < form.idIssueDate) {
+      alert('ID expiry date must be after the issue date.');
+      return;
+    }
+
+    // Adding a new current resident to a flat that already has one is often
+    // intentional (owner + tenant, roommates) but sometimes a mistake
+    // (duplicate entry) - confirm rather than silently allowing either way.
+    if (!form.id && form.status === 'current') {
+      const existingCurrent = residents.filter((r) => r.flatId === form.flatId && statusOf(r) === 'current');
+      if (existingCurrent.length > 0) {
+        const names = existingCurrent.map((r) => r.name).join(', ');
+        const ok = confirm(`This flat already has ${existingCurrent.length} current resident(s): ${names}.\n\nAdd ${form.name} as another current resident on the same flat?`);
+        if (!ok) return;
+      }
+    }
+
     if (form.isBillingContact) {
       const others = residents.filter((r) => r.flatId === form.flatId && r.id !== form.id && isBillingContactOf(r));
       await Promise.all(others.map((r) => r.id && db.residents.update(r.id, { isBillingContact: false })));
@@ -104,77 +155,54 @@ export default function Residents() {
         </div>
       </div>
 
-      <div className="card overflow-hidden">
-        <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full min-w-[850px]">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="table-th">#</th><th className="table-th">Resident Name</th><th className="table-th">Type</th><th className="table-th">Status</th>
-                <th className="table-th">Mobile</th><th className="table-th">Email</th><th className="table-th">Flat</th>
-                <th className="table-th text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.map((r, i) => (
-                <tr key={r.id}>
-                  <td className="table-td">{i + 1}</td>
-                  <td className="table-td font-medium text-gray-800">
-                    {r.name}
-                    {isBillingContactOf(r) && statusOf(r) === 'current' && (
-                      <span className="ml-2 text-[10px] text-brand-500 font-normal align-middle">● billed</span>
-                    )}
-                  </td>
-                  <td className="table-td">
-                    <span className={r.type === 'Owner' ? 'badge-partial' : 'badge-paid'}>{r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}</span>
-                  </td>
-                  <td className="table-td">
-                    <span className={statusOf(r) === 'current' ? 'badge-paid' : 'badge-unpaid'}>{statusOf(r) === 'current' ? 'Current' : 'Former'}</span>
-                    {statusOf(r) === 'former' && r.moveOutDate && <div className="text-[10px] text-gray-400 mt-0.5">Moved out {dateLabel(r.moveOutDate)}</div>}
-                    {statusOf(r) === 'current' && r.moveInDate && <div className="text-[10px] text-gray-400 mt-0.5">Since {dateLabel(r.moveInDate)}</div>}
-                  </td>
-                  <td className="table-td">{r.mobile || '—'}</td>
-                  <td className="table-td">{r.email || '—'}</td>
-                  <td className="table-td">{buildingName(r.buildingId)} · {r.unitLabel}</td>
-                  <td className="table-td text-right">
-                    <button onClick={() => openEdit(r)} className="icon-btn text-brand-500 mr-1"><Pencil size={16} /></button>
-                    <button onClick={() => remove(r.id)} className="icon-btn text-red-400"><Trash2 size={16} /></button>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={8} className="text-center text-sm text-gray-400 py-8">No residents found</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile card list */}
-        <div className="sm:hidden divide-y divide-gray-100">
-          {filtered.map((r) => (
-            <div key={r.id} className="p-4 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-gray-800">{r.name}</span>
-                  <span className={r.type === 'Owner' ? 'badge-partial' : 'badge-paid'}>{r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}</span>
-                  <span className={statusOf(r) === 'current' ? 'badge-paid' : 'badge-unpaid'}>{statusOf(r) === 'current' ? 'Current' : 'Former'}</span>
-                </div>
-                <div className="text-sm text-gray-500 mt-0.5">{buildingName(r.buildingId)} · {r.unitLabel}</div>
-                <div className="text-xs text-gray-400 mt-1">{r.mobile || '—'} · {r.email || '—'}</div>
-                {statusOf(r) === 'former' && r.moveOutDate && <div className="text-[10px] text-gray-400 mt-0.5">Moved out {dateLabel(r.moveOutDate)}</div>}
-                {statusOf(r) === 'current' && r.moveInDate && <div className="text-[10px] text-gray-400 mt-0.5">Since {dateLabel(r.moveInDate)}</div>}
+      <div className="space-y-3">
+        {groups.map((g) => (
+          <div key={g.flat.id} className="card overflow-hidden">
+            <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <Building2 size={14} className="text-gray-400" />
+                {buildingName(g.flat.buildingId)} · Flat {g.flat.unitNo}
               </div>
-              <div className="flex items-center shrink-0 gap-1">
-                <button onClick={() => openEdit(r)} className="icon-btn text-brand-500"><Pencil size={18} /></button>
-                <button onClick={() => remove(r.id)} className="icon-btn text-red-400"><Trash2 size={18} /></button>
-              </div>
+              <span className="text-xs text-gray-400">{g.residents.length} resident{g.residents.length > 1 ? 's' : ''}</span>
             </div>
-          ))}
-          {filtered.length === 0 && (
-            <div className="text-center text-sm text-gray-400 py-8">No residents found</div>
-          )}
-        </div>
-
-        <div className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100">Total: {filtered.length} residents</div>
+            <div className="divide-y divide-gray-100">
+              {g.residents.map((r) => {
+                const bal = depositBalance(r.id);
+                return (
+                  <div key={r.id} className="p-4 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-gray-800">{r.name}</span>
+                        <span className={r.type === 'Owner' ? 'badge-partial' : 'badge-paid'}>{r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}</span>
+                        <span className={statusOf(r) === 'current' ? 'badge-paid' : 'badge-unpaid'}>{statusOf(r) === 'current' ? 'Current' : 'Former'}</span>
+                        {isBillingContactOf(r) && statusOf(r) === 'current' && (
+                          <span className="text-[10px] text-brand-500 font-medium">● billed</span>
+                        )}
+                        {r.idNumber && <IdCard size={13} className="text-gray-400" aria-label="ID on file" />}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">{r.mobile || '—'} · {r.email || '—'}</div>
+                      {statusOf(r) === 'former' && r.moveOutDate && <div className="text-[10px] text-gray-400 mt-0.5">Moved out {dateLabel(r.moveOutDate)}</div>}
+                      {statusOf(r) === 'current' && r.moveInDate && <div className="text-[10px] text-gray-400 mt-0.5">Since {dateLabel(r.moveInDate)}</div>}
+                      {bal !== 0 && (
+                        <div className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-1">
+                          <Wallet size={11} /> Deposit balance: {bal.toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center shrink-0 gap-1">
+                      <button onClick={() => openEdit(r)} className="icon-btn text-brand-500"><Pencil size={18} /></button>
+                      <button onClick={() => remove(r.id)} className="icon-btn text-red-400"><Trash2 size={18} /></button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        {groups.length === 0 && (
+          <div className="card p-8 text-center text-sm text-gray-400">No residents found</div>
+        )}
+        <div className="text-xs text-gray-400 px-1">Total: {filtered.length} resident{filtered.length !== 1 ? 's' : ''} across {groups.length} flat{groups.length !== 1 ? 's' : ''}</div>
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'Edit Resident' : 'Add Resident'}>
@@ -216,6 +244,45 @@ export default function Residents() {
             Bill this resident by default for this flat
           </label>
           <div className="text-[11px] text-gray-400 -mt-2">Only one resident per flat can be the default billing contact — marking this one will unmark any other.</div>
+
+          <div className="pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-1.5 text-sm font-medium text-gray-700 pt-3 mb-2">
+              <IdCard size={14} /> ID Verification (optional)
+            </div>
+            <div className="text-[11px] text-gray-400 mb-2">Some jurisdictions require landlords to keep a copy of tenant ID on file. Stored locally only — nothing leaves this device.</div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label">ID Type</label>
+                <input className="input" placeholder="e.g. Passport, National ID" value={form.idType ?? ''} onChange={(e) => setForm({ ...form, idType: e.target.value })} /></div>
+              <div><label className="label">ID Number</label>
+                <input className="input" value={form.idNumber ?? ''} onChange={(e) => setForm({ ...form, idNumber: e.target.value })} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-3">
+              <div><label className="label">Issue Date</label>
+                <input type="date" className="input" value={form.idIssueDate ?? ''} onChange={(e) => setForm({ ...form, idIssueDate: e.target.value })} /></div>
+              <div><label className="label">Expiry Date</label>
+                <input type="date" className="input" value={form.idExpiryDate ?? ''} onChange={(e) => setForm({ ...form, idExpiryDate: e.target.value })} />
+                {form.idExpiryDate && form.idExpiryDate < todayISO() && (
+                  <div className="text-xs text-red-500 mt-1">This ID has expired.</div>
+                )}
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className="label">ID Document (photo/scan)</label>
+              <div className="flex items-center gap-3">
+                <div className="w-16 h-16 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
+                  {form.idDocumentImage ? <img src={form.idDocumentImage} className="w-full h-full object-cover" /> : <IdCard className="text-gray-300" size={20} />}
+                </div>
+                <label className="btn-secondary cursor-pointer text-xs">
+                  Upload
+                  <input type="file" accept="image/*" className="hidden" onChange={onIdFileChange} />
+                </label>
+                {form.idDocumentImage && (
+                  <button onClick={() => setForm({ ...form, idDocumentImage: '' })} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
+                )}
+              </div>
+              {idFileError && <div className="text-xs text-red-500 mt-1">{idFileError}</div>}
+            </div>
+          </div>
 
           <div className="flex gap-2 pt-2">
             <button onClick={save} className="btn-primary flex-1">Save</button>

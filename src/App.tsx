@@ -15,6 +15,12 @@ import SettingsPage from '@/pages/Settings';
 import BackupRestore from '@/pages/BackupRestore';
 import Help from '@/pages/Help';
 import SetupWizard from '@/pages/SetupWizard';
+import Deposits from '@/pages/Deposits';
+import Maintenance from '@/pages/Maintenance';
+import Expenses from '@/pages/Expenses';
+import Reminders from '@/pages/Reminders';
+import Documents from '@/pages/Documents';
+import Timeline from '@/pages/Timeline';
 
 function SetupRoute() {
   const navigate = useNavigate();
@@ -59,6 +65,12 @@ export default function App() {
           <Route path="/billing/generator" element={<BillGenerator />} />
           <Route path="/billing/history" element={<BillsHistory />} />
           <Route path="/billing/payments" element={<Payments />} />
+          <Route path="/deposits" element={<Deposits />} />
+          <Route path="/maintenance" element={<Maintenance />} />
+          <Route path="/expenses" element={<Expenses />} />
+          <Route path="/reminders" element={<Reminders />} />
+          <Route path="/documents" element={<Documents />} />
+          <Route path="/timeline" element={<Timeline />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/backup" element={<BackupRestore />} />

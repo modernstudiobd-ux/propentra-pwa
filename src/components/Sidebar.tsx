@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Home, Users, Receipt, FileText,
   History, CreditCard, BarChart3, Settings, DatabaseBackup,
-  ChevronDown, X, HelpCircle,
+  ChevronDown, X, HelpCircle, PiggyBank, Wrench, Wallet, BellRing, FolderOpen, History as HistoryIcon,
 } from 'lucide-react';
 import { useState } from 'react';
 import StorageStatus from './StorageStatus';
@@ -21,6 +21,15 @@ const billingNav = [
 
 const paymentsNav = [
   { to: '/billing/payments', label: 'Payments', icon: CreditCard },
+  { to: '/deposits', label: 'Deposits & Advances', icon: PiggyBank },
+];
+
+const operationsNav = [
+  { to: '/maintenance', label: 'Maintenance', icon: Wrench },
+  { to: '/expenses', label: 'Expenses', icon: Wallet },
+  { to: '/reminders', label: 'Reminders', icon: BellRing },
+  { to: '/documents', label: 'Documents', icon: FolderOpen },
+  { to: '/timeline', label: 'Timeline', icon: HistoryIcon },
 ];
 
 const bottomNav = [
@@ -88,6 +97,11 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
 
           <div className="pt-1 space-y-1">
             {paymentsNav.map((n) => <Item key={n.to} {...n} />)}
+          </div>
+
+          <div className="pt-2 mt-1 border-t border-white/[0.06] pb-1" />
+          <div className="pt-1 space-y-1">
+            {operationsNav.map((n) => <Item key={n.to} {...n} />)}
           </div>
 
           <div className="pt-2 mt-2 border-t border-white/[0.06] space-y-1">
