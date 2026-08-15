@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
-import { Plus, Pencil, Trash2, Search, IdCard, Wallet, Building2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, IdCard, Wallet, Building2, Eye, EyeOff, Archive, ArchiveRestore } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Modal from '@/components/Modal';
 import { dateLabel } from '@/lib/format';
@@ -27,8 +27,11 @@ export default function Residents() {
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | ResidentType>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | ResidentStatus>('current');
+  const [showArchived, setShowArchived] = useState(false);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Resident>(emptyForm([]));
+  const [revealId, setRevealId] = useState(false);
+  const [revealDoc, setRevealDoc] = useState(false);
   const [idFileError, setIdFileError] = useState('');
 
   const buildingName = (id: number) => buildings.find((b) => b.id === id)?.name ?? '—';
@@ -45,6 +48,7 @@ export default function Residents() {
   };
 
   const filtered = residents.filter((r) =>
+    (showArchived || !r.archived) &&
     (typeFilter === 'all' || r.type === typeFilter) &&
     (statusFilter === 'all' || statusOf(r) === statusFilter) &&
     (r.name.toLowerCase().includes(query.toLowerCase()) || r.email.toLowerCase().includes(query.toLowerCase()))
@@ -58,8 +62,9 @@ export default function Residents() {
     .filter((g) => g.residents.length > 0)
     .sort((a, b) => buildingName(a.flat.buildingId).localeCompare(buildingName(b.flat.buildingId)) || a.flat.unitNo.localeCompare(b.flat.unitNo));
 
-  function openAdd() { setForm(emptyForm(flats)); setIdFileError(''); setOpen(true); }
+  function openAdd() { setForm(emptyForm(flats)); setIdFileError(''); setRevealId(false); setRevealDoc(false); setOpen(true); }
   function openEdit(r: Resident) {
+    setRevealId(false); setRevealDoc(false);
     setForm({
       ...r, status: statusOf(r), isBillingContact: isBillingContactOf(r),
       moveInDate: r.moveInDate ?? '', moveOutDate: r.moveOutDate ?? '',
@@ -115,8 +120,18 @@ export default function Residents() {
 
   async function remove(id?: number) {
     if (!id) return;
-    if (!confirm('Delete this resident? Their billing/payment history will remain but no longer link to a name.')) return;
+    if (!confirm('Permanently delete this resident? This cannot be undone - their billing/payment history will remain but no longer link to a name.\n\nConsider Archiving instead if you just want them out of the way while keeping the record.')) return;
     await db.residents.delete(id);
+  }
+
+  async function archive(r: Resident) {
+    if (!r.id) return;
+    await db.residents.update(r.id, { archived: true, archivedAt: new Date().toISOString() });
+  }
+
+  async function unarchive(r: Resident) {
+    if (!r.id) return;
+    await db.residents.update(r.id, { archived: false, archivedAt: undefined });
   }
 
   return (
@@ -137,6 +152,12 @@ export default function Residents() {
             <option value="Tenant">Tenant</option>
             <option value="Owner">Flat Owner</option>
           </select>
+          <button
+            onClick={() => setShowArchived((v) => !v)}
+            className={`px-3 py-2 rounded-lg text-sm font-medium border shrink-0 flex items-center gap-1.5 ${showArchived ? 'bg-gray-100 border-gray-200 text-gray-700' : 'border-gray-200 text-gray-500'}`}
+          >
+            {showArchived ? <EyeOff size={14} /> : <Eye size={14} />} {showArchived ? 'Hide archived' : 'Show archived'}
+          </button>
         </div>
         <div className="flex flex-col items-end gap-1">
           <button
@@ -169,12 +190,13 @@ export default function Residents() {
               {g.residents.map((r) => {
                 const bal = depositBalance(r.id);
                 return (
-                  <div key={r.id} className="p-4 flex items-start justify-between gap-3">
+                  <div key={r.id} className={`p-4 flex items-start justify-between gap-3 ${r.archived ? 'opacity-60' : ''}`}>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-gray-800">{r.name}</span>
                         <span className={r.type === 'Owner' ? 'badge-partial' : 'badge-paid'}>{r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}</span>
                         <span className={statusOf(r) === 'current' ? 'badge-paid' : 'badge-unpaid'}>{statusOf(r) === 'current' ? 'Current' : 'Former'}</span>
+                        {r.archived && <span className="badge-partial">Archived</span>}
                         {isBillingContactOf(r) && statusOf(r) === 'current' && (
                           <span className="text-[10px] text-brand-500 font-medium">● billed</span>
                         )}
@@ -191,7 +213,12 @@ export default function Residents() {
                     </div>
                     <div className="flex items-center shrink-0 gap-1">
                       <button onClick={() => openEdit(r)} className="icon-btn text-brand-500"><Pencil size={18} /></button>
-                      <button onClick={() => remove(r.id)} className="icon-btn text-red-400"><Trash2 size={18} /></button>
+                      {r.archived ? (
+                        <button onClick={() => unarchive(r)} className="icon-btn text-brand-500" title="Unarchive"><ArchiveRestore size={18} /></button>
+                      ) : (
+                        <button onClick={() => archive(r)} className="icon-btn text-gray-400" title="Archive (hide, but keep the record)"><Archive size={18} /></button>
+                      )}
+                      <button onClick={() => remove(r.id)} className="icon-btn text-red-400" title="Permanently delete"><Trash2 size={18} /></button>
                     </div>
                   </div>
                 );
@@ -254,7 +281,17 @@ export default function Residents() {
               <div><label className="label">ID Type</label>
                 <input className="input" placeholder="e.g. Passport, National ID" value={form.idType ?? ''} onChange={(e) => setForm({ ...form, idType: e.target.value })} /></div>
               <div><label className="label">ID Number</label>
-                <input className="input" value={form.idNumber ?? ''} onChange={(e) => setForm({ ...form, idNumber: e.target.value })} /></div>
+                <div className="relative">
+                  <input
+                    type={revealId ? 'text' : 'password'}
+                    className="input pr-9"
+                    value={form.idNumber ?? ''}
+                    onChange={(e) => setForm({ ...form, idNumber: e.target.value })}
+                  />
+                  <button type="button" onClick={() => setRevealId((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    {revealId ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div></div>
             </div>
             <div className="grid grid-cols-2 gap-3 mt-3">
               <div><label className="label">Issue Date</label>
@@ -270,14 +307,22 @@ export default function Residents() {
               <label className="label">ID Document (photo/scan)</label>
               <div className="flex items-center gap-3">
                 <div className="w-16 h-16 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
-                  {form.idDocumentImage ? <img src={form.idDocumentImage} className="w-full h-full object-cover" /> : <IdCard className="text-gray-300" size={20} />}
+                  {form.idDocumentImage ? (
+                    revealDoc ? (
+                      <img src={form.idDocumentImage} className="w-full h-full object-cover" />
+                    ) : (
+                      <button type="button" onClick={() => setRevealDoc(true)} className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-brand-500" title="Click to view">
+                        <Eye size={16} /><span className="text-[9px]">View</span>
+                      </button>
+                    )
+                  ) : <IdCard className="text-gray-300" size={20} />}
                 </div>
                 <label className="btn-secondary cursor-pointer text-xs">
                   Upload
                   <input type="file" accept="image/*" className="hidden" onChange={onIdFileChange} />
                 </label>
                 {form.idDocumentImage && (
-                  <button onClick={() => setForm({ ...form, idDocumentImage: '' })} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
+                  <button onClick={() => { setForm({ ...form, idDocumentImage: '' }); setRevealDoc(false); }} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
                 )}
               </div>
               {idFileError && <div className="text-xs text-red-500 mt-1">{idFileError}</div>}

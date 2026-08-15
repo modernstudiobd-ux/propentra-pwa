@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel } from '@/lib/format';
-import { Search, Wallet, Plus, ArrowRightLeft, Undo2, SlidersHorizontal, Ban } from 'lucide-react';
+import { Search, Wallet, Plus, ArrowRightLeft, Undo2, SlidersHorizontal, Ban, Trash2 } from 'lucide-react';
 import Modal from '@/components/Modal';
 import {
-  collectDeposit, applyDepositToBill, refundDeposit, adjustDeposit, voidDepositTransaction, DepositError,
+  collectDeposit, applyDepositToBill, refundDeposit, adjustDeposit, voidDepositTransaction,
+  permanentlyDeleteVoidedDepositTransaction, DepositError,
 } from '@/lib/deposits';
 import type { Resident, DepositTransaction } from '@/types';
 
@@ -87,10 +88,20 @@ export default function Deposits() {
   async function onVoidTxn(t: DepositTransaction) {
     const reason = prompt('Reason for voiding this deposit transaction:');
     if (reason === null) return;
+    if (!reason.trim()) { alert('A reason is required to void a deposit transaction.'); return; }
     try {
-      await voidDepositTransaction(t, reason.trim() || 'No reason given');
+      await voidDepositTransaction(t, reason.trim());
     } catch (e) {
       alert(e instanceof DepositError ? e.message : 'Could not void this transaction.');
+    }
+  }
+
+  async function onDeleteTxn(t: DepositTransaction) {
+    if (!confirm('Permanently delete this voided transaction? This cannot be undone.')) return;
+    try {
+      await permanentlyDeleteVoidedDepositTransaction(t);
+    } catch (e) {
+      alert(e instanceof DepositError ? e.message : 'Could not delete this transaction.');
     }
   }
 
@@ -157,9 +168,12 @@ export default function Deposits() {
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2 mt-0.5">
-                <div className="text-xs text-gray-400">{txnTypeLabel[t.type]} · {dateLabel(t.date)}{t.voided ? ' · Voided' : ''}</div>
+                <div className="text-xs text-gray-400" title={t.voided ? t.voidReason : undefined}>{txnTypeLabel[t.type]} · {dateLabel(t.date)}{t.voided ? ' · Voided' : ''}</div>
                 {!t.voided && t.type !== 'applied' && (
                   <button onClick={() => onVoidTxn(t)} className="text-gray-300 hover:text-red-500" title="Void"><Ban size={13} /></button>
+                )}
+                {t.voided && (
+                  <button onClick={() => onDeleteTxn(t)} className="text-gray-300 hover:text-red-500" title="Permanently delete"><Trash2 size={13} /></button>
                 )}
               </div>
               {t.notes && <div className="text-xs text-gray-400 mt-0.5">{t.notes}</div>}

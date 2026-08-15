@@ -37,6 +37,12 @@ export interface Resident {
   idIssueDate?: string; // ISO date
   idExpiryDate?: string; // ISO date - feeds Dashboard "expiring soon" alerts
   idDocumentImage?: string; // base64 scan/photo of the ID
+  // Archiving hides a resident from the everyday list without deleting them
+  // (unlike status='former', which reflects a real-world move-out, archiving
+  // is purely a "get this out of my way but keep it recoverable" action -
+  // e.g. cleaning up years-old former residents).
+  archived?: boolean;
+  archivedAt?: string;
 }
 
 export interface ChargeLine {
@@ -64,6 +70,9 @@ export interface Bill {
   totalAmount: number;
   status: 'unpaid' | 'partial' | 'paid';
   paidAmount: number;
+  voided?: boolean;
+  voidedAt?: string;
+  voidReason?: string;
 }
 
 export interface Receipt {
@@ -122,6 +131,7 @@ export interface DepositTransaction {
   notes?: string;
   voided?: boolean;
   voidedAt?: string;
+  voidReason?: string;
 }
 
 // --- Maintenance -------------------------------------------------------------
@@ -195,7 +205,7 @@ export interface DocumentRecord {
   linkType: 'building' | 'flat' | 'resident' | 'none';
   linkId?: number;
   buildingId?: number;
-  fileData: string; // base64
+  fileData: Blob; // stored as a native Blob (efficient in IndexedDB) - converted to base64 only at backup/restore time for JSON compatibility
   fileName: string;
   fileType: string; // mime type
   fileSize: number; // bytes
@@ -207,6 +217,8 @@ export interface DocumentRecord {
 export interface CompanySettings {
   id?: number;
   onboardingComplete?: boolean;
+  nextInvoiceSeq?: number; // persistent monotonic counter - never reused, even if bills are voided/deleted
+  nextReceiptSeq?: number;
   companyName: string;
   address: string;
   phone: string;

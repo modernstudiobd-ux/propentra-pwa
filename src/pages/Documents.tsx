@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { dateLabel } from '@/lib/format';
-import { validateFile, fileToBase64 } from '@/lib/fileValidation';
+import { validateFile } from '@/lib/fileValidation';
 import { Plus, Trash2, Search, FolderOpen, Download, AlertTriangle } from 'lucide-react';
 import Modal from '@/components/Modal';
 import type { DocumentRecord } from '@/types';
@@ -30,7 +30,7 @@ export default function Documents() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<DocumentRecord>>(emptyForm());
   const [fileErr, setFileErr] = useState<string | null>(null);
-  const [pendingFile, setPendingFile] = useState<{ data: string; name: string; type: string; size: number } | null>(null);
+  const [pendingFile, setPendingFile] = useState<{ data: Blob; name: string; type: string; size: number } | null>(null);
 
   function linkLabel(d: DocumentRecord) {
     if (d.linkType === 'building') return buildings.find((b) => b.id === d.linkId)?.name ?? '—';
@@ -52,8 +52,7 @@ export default function Documents() {
     const err = validateFile(file);
     if (err) { setFileErr(err); setPendingFile(null); return; }
     setFileErr(null);
-    const data = await fileToBase64(file);
-    setPendingFile({ data, name: file.name, type: file.type, size: file.size });
+    setPendingFile({ data: file, name: file.name, type: file.type, size: file.size });
   }
 
   async function save() {
@@ -80,10 +79,12 @@ export default function Documents() {
   }
 
   function download(d: DocumentRecord) {
+    const url = URL.createObjectURL(d.fileData);
     const a = document.createElement('a');
-    a.href = d.fileData;
+    a.href = url;
     a.download = d.fileName;
     a.click();
+    URL.revokeObjectURL(url);
   }
 
   const linkOptions = form.linkType === 'building' ? buildings.map((b) => ({ id: b.id!, label: b.name }))

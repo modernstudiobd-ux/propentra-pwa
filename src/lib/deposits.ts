@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { genReceiptNo } from '@/lib/billing';
 import type { Resident, Bill, DepositTransaction } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -51,7 +52,7 @@ export async function applyDepositToBill(resident: Resident, bill: Bill, amount:
     throw new DepositError(`Amount exceeds the invoice's remaining balance (${due.toFixed(2)}).`);
   }
 
-  return db.transaction('rw', [db.bills, db.receipts, db.payments, db.depositTransactions], async () => {
+  return db.transaction('rw', [db.bills, db.receipts, db.payments, db.depositTransactions, db.settings], async () => {
     const freshBill = await db.bills.get(bill.id!);
     if (!freshBill) throw new DepositError('Invoice no longer exists.');
 
@@ -59,9 +60,9 @@ export async function applyDepositToBill(resident: Resident, bill: Bill, amount:
     const status = newPaid >= freshBill.totalAmount ? 'paid' : newPaid > 0 ? 'partial' : 'unpaid';
     await db.bills.update(freshBill.id!, { paidAmount: newPaid, status });
 
-    const receiptCount = await db.receipts.count();
+    const receiptNo = await genReceiptNo();
     const receiptId = await db.receipts.add({
-      receiptNo: `RCPT-2026-${String(43 + receiptCount).padStart(4, '0')}`,
+      receiptNo,
       invoiceId: freshBill.id!,
       residentId: freshBill.residentId,
       buildingId: freshBill.buildingId,
@@ -117,6 +118,11 @@ export async function adjustDeposit(resident: Resident, amount: number, notes: s
     throw new DepositError('Enter a non-zero adjustment amount.');
   }
   if (!notes.trim()) throw new DepositError('A note explaining the adjustment is required.');
+  const balance = await getDepositBalance(resident.id!);
+  const resultingBalance = Math.round((balance + amount) * 100) / 100;
+  if (resultingBalance < 0) {
+    throw new DepositError(`This adjustment would take the deposit balance negative (currently ${balance.toFixed(2)}). Enter a smaller deduction.`);
+  }
   await db.depositTransactions.add({
     residentId: resident.id!, buildingId: resident.buildingId, flatId: resident.flatId,
     type: 'adjustment', amount, date: todayISO(), notes, voided: false,
@@ -134,5 +140,17 @@ export async function voidDepositTransaction(txn: DepositTransaction, reason: st
   if (txn.type === 'applied') {
     throw new DepositError('This deposit was applied to an invoice - void the payment from the Payments page instead, which reverses both records consistently.');
   }
-  await db.depositTransactions.update(txn.id, { voided: true, voidedAt: new Date().toISOString() });
+  if (!reason.trim()) throw new DepositError('A reason is required to void a deposit transaction.');
+  await db.depositTransactions.update(txn.id, { voided: true, voidedAt: new Date().toISOString(), voidReason: reason.trim() });
+}
+
+/**
+ * Permanently deletes a deposit transaction - but ONLY if it's already
+ * voided. Same two-tier pattern as payments: void protects anything live,
+ * hard delete only ever applies to something already fully reversed.
+ */
+export async function permanentlyDeleteVoidedDepositTransaction(txn: DepositTransaction) {
+  if (!txn.id) return;
+  if (!txn.voided) throw new DepositError('Only voided deposit transactions can be permanently deleted. Void it first.');
+  await db.depositTransactions.delete(txn.id);
 }

@@ -3,14 +3,51 @@ import type { Bill, Payment } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 
+/**
+ * Atomically reads-increments-writes a persistent sequence counter in
+ * Settings. This replaces the old `.count()`-based numbering, which was
+ * unsafe: voiding or deleting any bill/receipt shifts the count, so the
+ * next generated number could collide with one that already exists.
+ * A monotonic counter that's never decremented and never reused fixes this.
+ *
+ * On first use (counter not yet set - e.g. an existing install upgrading to
+ * this fix), it bootstraps from the highest sequence number actually found
+ * in existing records, so it can never collide with numbers already handed
+ * out under the old scheme.
+ */
+async function nextSeq(field: 'nextInvoiceSeq' | 'nextReceiptSeq', bootstrapFrom: () => Promise<number>): Promise<number> {
+  return db.transaction('rw', db.settings, db.bills, db.receipts, async () => {
+    const settings = await db.settings.toCollection().first();
+    if (!settings?.id) throw new Error('Settings not initialized yet - reload the app and try again.');
+    let seq = settings[field];
+    if (seq === undefined) seq = await bootstrapFrom();
+    await db.settings.update(settings.id, { [field]: seq + 1 });
+    return seq;
+  });
+}
+
 export async function genInvoiceNo() {
-  const count = await db.bills.count();
-  return `INV-2026-${String(76 + count).padStart(3, '0')}`;
+  const seq = await nextSeq('nextInvoiceSeq', async () => {
+    const existing = await db.bills.toArray();
+    const maxSeq = existing.reduce((max, b) => {
+      const m = /INV-\d{4}-(\d+)/.exec(b.invoiceNo);
+      return m ? Math.max(max, parseInt(m[1], 10)) : max;
+    }, 75);
+    return maxSeq + 1;
+  });
+  return `INV-2026-${String(seq).padStart(3, '0')}`;
 }
 
 export async function genReceiptNo() {
-  const count = await db.receipts.count();
-  return `RCPT-2026-${String(43 + count).padStart(4, '0')}`;
+  const seq = await nextSeq('nextReceiptSeq', async () => {
+    const existing = await db.receipts.toArray();
+    const maxSeq = existing.reduce((max, r) => {
+      const m = /RCPT-\d{4}-(\d+)/.exec(r.receiptNo);
+      return m ? Math.max(max, parseInt(m[1], 10)) : max;
+    }, 42);
+    return maxSeq + 1;
+  });
+  return `RCPT-2026-${String(seq).padStart(4, '0')}`;
 }
 
 function statusFor(bill: Bill, paidAmount: number): Bill['status'] {
@@ -67,7 +104,7 @@ export async function recordPaymentForBill(
   if (!bill.id) throw new Error('Bill has no id');
   validatePaymentAmount(bill, amountReceived);
 
-  return db.transaction('rw', [db.bills, db.receipts, db.payments], async () => {
+  return db.transaction('rw', [db.bills, db.receipts, db.payments, db.settings], async () => {
     // Re-read the bill inside the transaction in case it changed since the
     // caller loaded it (e.g. another payment was just recorded) - avoids a
     // stale-read race that could double-apply or miscalculate the balance.
@@ -116,6 +153,28 @@ export async function recordPaymentForBill(
 }
 
 /**
+ * Permanently deletes a payment - but ONLY if it's already voided. A voided
+ * payment has zero effect on any balance (that's what voiding did), so
+ * removing the record itself is just cleanup, not a loss of financial
+ * truth. This is the standard two-tier pattern (see e.g. QuickBooks/Xero):
+ * void protects anything "live"; hard delete is only ever available for
+ * something that's already been fully reversed.
+ */
+export async function permanentlyDeleteVoidedPayment(payment: Payment) {
+  if (!payment.id) return;
+  if (!payment.voided) {
+    throw new Error('Only voided payments can be permanently deleted. Void it first.');
+  }
+  await db.transaction('rw', [db.payments, db.receipts], async () => {
+    await db.payments.delete(payment.id!);
+    if (payment.receiptId) {
+      const receipt = await db.receipts.get(payment.receiptId);
+      if (receipt?.voided) await db.receipts.delete(payment.receiptId);
+    }
+  });
+}
+
+/**
  * Voids a payment instead of deleting it - the record stays forever for
  * audit purposes, just marked voided, with the bill's balance reversed
  * atomically. This replaces the old hard-delete "remove payment" behavior.
@@ -141,4 +200,42 @@ export async function voidPayment(payment: Payment, reason: string) {
       });
     }
   });
+}
+
+export class BillVoidError extends Error {}
+
+/**
+ * Voids an invoice instead of deleting it. Blocked if the invoice has any
+ * active (non-voided) payments against it - those must be voided first via
+ * the Payments page, so the payment-side balance reversal and the
+ * invoice-side void can never get out of sync. This replaces the old
+ * hard-delete, which silently orphaned any linked receipts/payments.
+ */
+export async function voidBill(bill: Bill, reason: string) {
+  if (!bill.id) return;
+  if (bill.voided) return;
+  if (!reason.trim()) throw new BillVoidError('A reason is required to void an invoice.');
+
+  const activePayments = await db.payments.where('invoiceId').equals(bill.id).toArray();
+  if (activePayments.some((p) => !p.voided)) {
+    throw new BillVoidError('This invoice has active payments against it. Void those payments first (from the Payments page), then void the invoice.');
+  }
+
+  await db.bills.update(bill.id, { voided: true, voidedAt: new Date().toISOString(), voidReason: reason.trim() });
+}
+
+/**
+ * Permanently deletes an invoice - but ONLY if it's already voided (which
+ * itself required all its payments to already be voided). Same two-tier
+ * pattern as payments/deposits: nothing with live financial effect can be
+ * hard-deleted, only something already fully reversed.
+ */
+export async function permanentlyDeleteVoidedBill(bill: Bill) {
+  if (!bill.id) return;
+  if (!bill.voided) throw new BillVoidError('Only voided invoices can be permanently deleted. Void it first.');
+  const stillLinked = await db.payments.where('invoiceId').equals(bill.id).toArray();
+  if (stillLinked.some((p) => !p.voided)) {
+    throw new BillVoidError('This invoice still has active payments linked to it and cannot be deleted.');
+  }
+  await db.bills.delete(bill.id);
 }

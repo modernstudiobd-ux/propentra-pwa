@@ -29,3 +29,23 @@ export function fileToBase64(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
+
+/** Blob -> base64 data URL, used only when writing a JSON backup file. */
+export function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Could not read file'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** base64 data URL -> Blob, used only when restoring from a JSON backup file. */
+export function base64ToBlob(dataUrl: string): Blob {
+  const [header, data] = dataUrl.split(',');
+  const mime = /data:(.*?);base64/.exec(header)?.[1] || 'application/octet-stream';
+  const binary = atob(data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}

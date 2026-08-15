@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel } from '@/lib/format';
-import { Search, Plus, Ban, Eye, EyeOff } from 'lucide-react';
+import { Search, Plus, Ban, Eye, EyeOff, Trash2 } from 'lucide-react';
 import Modal from '@/components/Modal';
 import PaymentMethodSelect from '@/components/PaymentMethodSelect';
-import { recordPaymentForBill, voidPayment, isDuplicatePayment } from '@/lib/billing';
+import { recordPaymentForBill, voidPayment, isDuplicatePayment, permanentlyDeleteVoidedPayment } from '@/lib/billing';
 import type { Bill } from '@/types';
 
 export default function Payments() {
@@ -71,6 +71,17 @@ export default function Payments() {
     await voidPayment(payment, reason.trim());
   }
 
+  async function handlePermanentDelete(paymentId?: number) {
+    const payment = payments.find((p) => p.id === paymentId);
+    if (!payment) return;
+    if (!confirm('Permanently delete this voided payment? This cannot be undone.')) return;
+    try {
+      await permanentlyDeleteVoidedPayment(payment);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not delete this payment.');
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -118,6 +129,9 @@ export default function Payments() {
                     {!p.voided && (
                       <button onClick={() => handleVoid(p.id)} className="icon-btn text-red-400" title="Void this payment"><Ban size={16} /></button>
                     )}
+                    {p.voided && (
+                      <button onClick={() => handlePermanentDelete(p.id)} className="icon-btn text-red-400" title="Permanently delete this voided payment"><Trash2 size={16} /></button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -141,6 +155,7 @@ export default function Payments() {
               <div className="flex items-center shrink-0 gap-2">
                 <span className="font-semibold text-gray-800 text-sm">{money(p.amount)}</span>
                 {!p.voided && <button onClick={() => handleVoid(p.id)} className="icon-btn text-red-400"><Ban size={18} /></button>}
+                {p.voided && <button onClick={() => handlePermanentDelete(p.id)} className="icon-btn text-red-400"><Trash2 size={18} /></button>}
               </div>
             </div>
           ))}
