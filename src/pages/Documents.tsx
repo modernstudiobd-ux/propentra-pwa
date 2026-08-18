@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { dateLabel } from '@/lib/format';
-import { validateFile } from '@/lib/fileValidation';
+import { validateFileContent } from '@/lib/fileValidation';
+import { logAudit } from '@/lib/audit';
 import { Plus, Trash2, Search, FolderOpen, Download, AlertTriangle } from 'lucide-react';
 import Modal from '@/components/Modal';
 import type { DocumentRecord } from '@/types';
@@ -30,6 +31,7 @@ export default function Documents() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Partial<DocumentRecord>>(emptyForm());
   const [fileErr, setFileErr] = useState<string | null>(null);
+  const [fileChecking, setFileChecking] = useState(false);
   const [pendingFile, setPendingFile] = useState<{ data: Blob; name: string; type: string; size: number } | null>(null);
 
   function linkLabel(d: DocumentRecord) {
@@ -48,16 +50,22 @@ export default function Documents() {
 
   async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    const err = validateFile(file);
-    if (err) { setFileErr(err); setPendingFile(null); return; }
-    setFileErr(null);
-    setPendingFile({ data: file, name: file.name, type: file.type, size: file.size });
+    setFileChecking(true);
+    try {
+      const err = await validateFileContent(file); // size + declared type + actual file-content signature
+      if (err) { setFileErr(err); setPendingFile(null); return; }
+      setFileErr(null);
+      setPendingFile({ data: file, name: file.name, type: file.type, size: file.size });
+    } finally {
+      setFileChecking(false);
+    }
   }
 
   async function save() {
     if (!form.title?.trim() || !pendingFile) return;
-    await db.documents.add({
+    const newId = await db.documents.add({
       title: form.title.trim(),
       category: form.category || 'Other',
       linkType: form.linkType ?? 'none',
@@ -69,13 +77,27 @@ export default function Documents() {
       fileData: pendingFile.data, fileName: pendingFile.name, fileType: pendingFile.type, fileSize: pendingFile.size,
       uploadDate: todayISO(), expiryDate: form.expiryDate || undefined, notes: form.notes,
     });
+    await logAudit({
+      action: 'document_uploaded', entityType: 'document', entityId: newId as number,
+      buildingId: form.linkType === 'building' ? form.linkId
+        : form.linkType === 'flat' ? flats.find((f) => f.id === form.linkId)?.buildingId
+        : form.linkType === 'resident' ? residents.find((r) => r.id === form.linkId)?.buildingId
+        : undefined,
+      summary: `Uploaded document "${form.title.trim()}" (${form.category})`,
+    });
     setOpen(false);
   }
 
   async function remove(id?: number) {
     if (!id) return;
+    const doc = documents.find((d) => d.id === id);
     if (!confirm('Delete this document?')) return;
     await db.documents.delete(id);
+    await logAudit({
+      action: 'document_deleted', entityType: 'document', entityId: id,
+      buildingId: doc?.buildingId,
+      summary: `Deleted document "${doc?.title ?? '#' + id}"`,
+    });
   }
 
   function download(d: DocumentRecord) {
@@ -168,7 +190,8 @@ export default function Documents() {
             )}
           </div>
           <div><label className="label">File *</label>
-            <input type="file" className="input" onChange={onFileChange} />
+            <input type="file" className="input" onChange={onFileChange} disabled={fileChecking} />
+            {fileChecking && <div className="text-xs text-gray-400 mt-1">Checking file...</div>}
             {fileErr && <div className="text-xs text-red-500 mt-1">{fileErr}</div>}
             {pendingFile && !fileErr && <div className="text-xs text-emerald-600 mt-1">{pendingFile.name} ready to upload.</div>}
           </div>

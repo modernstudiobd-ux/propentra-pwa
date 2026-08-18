@@ -31,9 +31,22 @@ npm install
 npm run dev
 ```
 
+## 4. Tests
+
+```bash
+npm install
+npm test        # run once
+npm run test:watch
+```
+
+Tests use Vitest with `fake-indexeddb` to run Dexie against a real (in-memory) IndexedDB implementation in Node — no browser needed. Coverage includes invoice/receipt numbering, payment and deposit financial calculations, resident archiving, file-content validation (including spoofed-file detection), backup/restore round-tripping, and transaction rollback behavior.
+
 ## Notes
 
 - **Data storage:** everything (buildings, flats, tenants, invoices, receipts, payments, settings) is stored in the browser's IndexedDB — nothing is sent to any server. Use **Backup & Restore** regularly (exports/imports a `.json` file) since clearing browser data will erase everything.
+- **Privacy:** resident ID numbers are masked by default (tap to reveal); ID document photos are stored as native IndexedDB Blobs, never base64 strings floating around in memory. Audit log entries record that a sensitive field changed, never the value itself.
+- **Audit log:** every payment, deposit, invoice void, resident change, document upload/delete, and backup/restore is recorded in an append-only **Audit Log** page — nothing there can be edited or deleted from the UI.
+- **File uploads:** every uploaded file (ID scans, documents) is checked against its actual byte signature, not just its extension or declared MIME type, to catch mislabeled or disguised files.
 - **PWA:** installable on desktop, Android, iOS (Safari → Share → Add to Home Screen), Windows, macOS, Linux. Works offline after first load.
 - **Printing invoices/receipts:** use the "Print / Save as PDF" button — it uses the browser's native print dialog (choose "Save as PDF" as the destination). No extra libraries needed.
 - **Multi-device:** since data is local to each browser, use Backup & Restore to move data between devices.

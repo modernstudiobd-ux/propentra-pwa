@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { Plus, Pencil, Trash2, Search, IdCard, Wallet, Building2, Eye, EyeOff, Archive, ArchiveRestore } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Modal from '@/components/Modal';
 import { dateLabel } from '@/lib/format';
-import { validateImageFile, fileToBase64 } from '@/lib/fileValidation';
+import { validateImageFileContent, maskIdNumber } from '@/lib/fileValidation';
+import { logAudit } from '@/lib/audit';
 import type { Resident, ResidentType, ResidentStatus } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -15,9 +16,25 @@ const emptyForm = (flats: { id?: number; buildingId: number; unitNo: string }[])
   return {
     name: '', mobile: '', email: '', flatId: f?.id ?? 0, buildingId: f?.buildingId ?? 0, unitLabel: f?.unitNo ?? '',
     type: 'Tenant', status: 'current', moveInDate: todayISO(), moveOutDate: '', isBillingContact: true,
-    idType: '', idNumber: '', idIssueDate: '', idExpiryDate: '', idDocumentImage: '',
+    idType: '', idNumber: '', idIssueDate: '', idExpiryDate: '', idDocumentBlob: undefined, idDocumentFileType: '',
   };
 };
+
+/** Diffs two residents for the audit trail - only names fields that actually changed, and never includes ID number / document contents (privacy: the audit log records THAT sensitive fields changed, not their values). */
+function diffSummary(before: Resident, after: Resident): string {
+  const fields: { key: keyof Resident; label: string; sensitive?: boolean }[] = [
+    { key: 'name', label: 'Name' }, { key: 'mobile', label: 'Mobile' }, { key: 'email', label: 'Email' },
+    { key: 'type', label: 'Type' }, { key: 'status', label: 'Status' }, { key: 'flatId', label: 'Flat' },
+    { key: 'moveInDate', label: 'Move-in date' }, { key: 'moveOutDate', label: 'Move-out date' },
+    { key: 'isBillingContact', label: 'Billing contact' },
+    { key: 'idType', label: 'ID type', sensitive: true }, { key: 'idNumber', label: 'ID number', sensitive: true },
+    { key: 'idIssueDate', label: 'ID issue date', sensitive: true }, { key: 'idExpiryDate', label: 'ID expiry date', sensitive: true },
+    { key: 'idDocumentBlob', label: 'ID document photo', sensitive: true },
+  ];
+  const changed = fields.filter((f) => (before as any)[f.key] !== (after as any)[f.key]);
+  if (changed.length === 0) return 'No field changes';
+  return `Changed: ${changed.map((f) => f.label).join(', ')}`;
+}
 
 export default function Residents() {
   const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
@@ -33,6 +50,20 @@ export default function Residents() {
   const [revealId, setRevealId] = useState(false);
   const [revealDoc, setRevealDoc] = useState(false);
   const [idFileError, setIdFileError] = useState('');
+  const [idFileChecking, setIdFileChecking] = useState(false);
+  const [docPreviewUrl, setDocPreviewUrl] = useState<string | null>(null);
+
+  // Blobs can't be used directly as an <img src> - build/revoke an object
+  // URL only while the document is actually being previewed, so we're never
+  // holding a live URL to sensitive ID imagery longer than needed.
+  useEffect(() => {
+    if (revealDoc && form.idDocumentBlob) {
+      const url = URL.createObjectURL(form.idDocumentBlob);
+      setDocPreviewUrl(url);
+      return () => URL.revokeObjectURL(url);
+    }
+    setDocPreviewUrl(null);
+  }, [revealDoc, form.idDocumentBlob]);
 
   const buildingName = (id: number) => buildings.find((b) => b.id === id)?.name ?? '—';
   const statusOf = (r: Resident): ResidentStatus => r.status ?? 'current';
@@ -81,12 +112,17 @@ export default function Residents() {
 
   async function onIdFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same filename later
     if (!file) return;
-    const err = validateImageFile(file);
-    if (err) { setIdFileError(err); return; }
-    setIdFileError('');
-    const data = await fileToBase64(file);
-    setForm({ ...form, idDocumentImage: data });
+    setIdFileChecking(true);
+    try {
+      const err = await validateImageFileContent(file); // size + declared type + actual file-content signature
+      if (err) { setIdFileError(err); return; }
+      setIdFileError('');
+      setForm({ ...form, idDocumentBlob: file, idDocumentFileType: file.type });
+    } finally {
+      setIdFileChecking(false);
+    }
   }
 
   async function save() {
@@ -113,25 +149,64 @@ export default function Residents() {
       const others = residents.filter((r) => r.flatId === form.flatId && r.id !== form.id && isBillingContactOf(r));
       await Promise.all(others.map((r) => r.id && db.residents.update(r.id, { isBillingContact: false })));
     }
-    if (form.id) await db.residents.update(form.id, form);
-    else await db.residents.add(form);
+    await db.transaction('rw', [db.residents, db.auditLog], async () => {
+      if (form.id) {
+        const before = residents.find((r) => r.id === form.id);
+        await db.residents.update(form.id, form);
+        await logAudit({
+          action: 'resident_updated', entityType: 'resident', entityId: form.id,
+          buildingId: form.buildingId, flatId: form.flatId, residentId: form.id,
+          summary: `Updated resident ${form.name}`,
+          details: before ? diffSummary(before, form) : undefined,
+        });
+      } else {
+        const newId = await db.residents.add(form);
+        await logAudit({
+          action: 'resident_created', entityType: 'resident', entityId: newId as number,
+          buildingId: form.buildingId, flatId: form.flatId, residentId: newId as number,
+          summary: `Added resident ${form.name} (${form.type})`,
+        });
+      }
+    });
     setOpen(false);
   }
 
   async function remove(id?: number) {
     if (!id) return;
+    const r = residents.find((x) => x.id === id);
     if (!confirm('Permanently delete this resident? This cannot be undone - their billing/payment history will remain but no longer link to a name.\n\nConsider Archiving instead if you just want them out of the way while keeping the record.')) return;
-    await db.residents.delete(id);
+    await db.transaction('rw', [db.residents, db.auditLog], async () => {
+      await db.residents.delete(id);
+      await logAudit({
+        action: 'resident_deleted', entityType: 'resident', entityId: id,
+        buildingId: r?.buildingId, flatId: r?.flatId, residentId: id,
+        summary: `Permanently deleted resident ${r?.name ?? '#' + id}`,
+      });
+    });
   }
 
   async function archive(r: Resident) {
     if (!r.id) return;
-    await db.residents.update(r.id, { archived: true, archivedAt: new Date().toISOString() });
+    await db.transaction('rw', [db.residents, db.auditLog], async () => {
+      await db.residents.update(r.id!, { archived: true, archivedAt: new Date().toISOString() });
+      await logAudit({
+        action: 'resident_archived', entityType: 'resident', entityId: r.id,
+        buildingId: r.buildingId, flatId: r.flatId, residentId: r.id,
+        summary: `Archived resident ${r.name}`,
+      });
+    });
   }
 
   async function unarchive(r: Resident) {
     if (!r.id) return;
-    await db.residents.update(r.id, { archived: false, archivedAt: undefined });
+    await db.transaction('rw', [db.residents, db.auditLog], async () => {
+      await db.residents.update(r.id!, { archived: false, archivedAt: undefined });
+      await logAudit({
+        action: 'resident_unarchived', entityType: 'resident', entityId: r.id,
+        buildingId: r.buildingId, flatId: r.flatId, residentId: r.id,
+        summary: `Unarchived resident ${r.name}`,
+      });
+    });
   }
 
   return (
@@ -200,7 +275,7 @@ export default function Residents() {
                         {isBillingContactOf(r) && statusOf(r) === 'current' && (
                           <span className="text-[10px] text-brand-500 font-medium">● billed</span>
                         )}
-                        {r.idNumber && <IdCard size={13} className="text-gray-400" aria-label="ID on file" />}
+                        {r.idNumber && <IdCard size={13} className="text-gray-400" aria-label="ID on file" title={`ID on file: ${maskIdNumber(r.idNumber)}`} />}
                       </div>
                       <div className="text-xs text-gray-400 mt-1">{r.mobile || '—'} · {r.email || '—'}</div>
                       {statusOf(r) === 'former' && r.moveOutDate && <div className="text-[10px] text-gray-400 mt-0.5">Moved out {dateLabel(r.moveOutDate)}</div>}
@@ -307,9 +382,9 @@ export default function Residents() {
               <label className="label">ID Document (photo/scan)</label>
               <div className="flex items-center gap-3">
                 <div className="w-16 h-16 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-center overflow-hidden shrink-0">
-                  {form.idDocumentImage ? (
+                  {form.idDocumentBlob ? (
                     revealDoc ? (
-                      <img src={form.idDocumentImage} className="w-full h-full object-cover" />
+                      docPreviewUrl ? <img src={docPreviewUrl} className="w-full h-full object-cover" /> : null
                     ) : (
                       <button type="button" onClick={() => setRevealDoc(true)} className="flex flex-col items-center gap-0.5 text-gray-400 hover:text-brand-500" title="Click to view">
                         <Eye size={16} /><span className="text-[9px]">View</span>
@@ -318,14 +393,15 @@ export default function Residents() {
                   ) : <IdCard className="text-gray-300" size={20} />}
                 </div>
                 <label className="btn-secondary cursor-pointer text-xs">
-                  Upload
-                  <input type="file" accept="image/*" className="hidden" onChange={onIdFileChange} />
+                  {idFileChecking ? 'Checking...' : 'Upload'}
+                  <input type="file" accept="image/*" className="hidden" onChange={onIdFileChange} disabled={idFileChecking} />
                 </label>
-                {form.idDocumentImage && (
-                  <button onClick={() => { setForm({ ...form, idDocumentImage: '' }); setRevealDoc(false); }} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
+                {form.idDocumentBlob && (
+                  <button onClick={() => { setForm({ ...form, idDocumentBlob: undefined, idDocumentFileType: '' }); setRevealDoc(false); }} className="text-red-400 hover:text-red-600 text-xs">Remove</button>
                 )}
               </div>
               {idFileError && <div className="text-xs text-red-500 mt-1">{idFileError}</div>}
+              <div className="text-[11px] text-gray-400 mt-1">File contents are verified on upload, not just the file extension.</div>
             </div>
           </div>
 

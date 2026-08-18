@@ -36,7 +36,10 @@ export interface Resident {
   idNumber?: string;
   idIssueDate?: string; // ISO date
   idExpiryDate?: string; // ISO date - feeds Dashboard "expiring soon" alerts
-  idDocumentImage?: string; // base64 scan/photo of the ID
+  /** @deprecated base64 scan/photo of the ID - replaced by idDocumentBlob (v4). Kept optional only so old records/backups migrate cleanly. */
+  idDocumentImage?: string;
+  idDocumentBlob?: Blob; // scan/photo of the ID, stored as a native Blob (smaller, faster, no base64 bloat)
+  idDocumentFileType?: string; // mime type of idDocumentBlob
   // Archiving hides a resident from the everyday list without deleting them
   // (unlike status='former', which reflects a real-world move-out, archiving
   // is purely a "get this out of my way but keep it recoverable" action -
@@ -212,6 +215,34 @@ export interface DocumentRecord {
   uploadDate: string; // ISO
   expiryDate?: string; // ISO, optional
   notes?: string;
+}
+
+// --- Audit Log ---------------------------------------------------------------
+// Append-only trail of every sensitive/financial action taken in the app.
+// Records are never edited or deleted through the UI - only ever added.
+
+export type AuditAction =
+  | 'payment_recorded' | 'payment_voided' | 'payment_deleted'
+  | 'deposit_collected' | 'deposit_applied' | 'deposit_refunded' | 'deposit_adjusted'
+  | 'deposit_voided' | 'deposit_deleted'
+  | 'bill_voided' | 'bill_deleted'
+  | 'resident_created' | 'resident_updated' | 'resident_deleted' | 'resident_archived' | 'resident_unarchived'
+  | 'document_uploaded' | 'document_deleted'
+  | 'backup_created' | 'restore_performed';
+
+export interface AuditLogEntry {
+  id?: number;
+  timestamp: string; // ISO datetime
+  action: AuditAction;
+  entityType: 'payment' | 'receipt' | 'bill' | 'deposit' | 'resident' | 'document' | 'backup';
+  entityId?: number; // id of the affected record, when applicable
+  buildingId?: number;
+  flatId?: number;
+  residentId?: number;
+  summary: string; // short human-readable description, e.g. "Voided payment of $150.00"
+  details?: string; // optional extra context (reason, field changes, counts...)
+  amount?: number; // financial amount involved, when applicable
+  performedBy: string; // no auth system yet, so this is always 'Local User' - kept as a field so it's ready if multi-user login is added later
 }
 
 export interface CompanySettings {

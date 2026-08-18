@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { logAudit } from '@/lib/audit';
 import type { Bill, Payment } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -104,7 +105,7 @@ export async function recordPaymentForBill(
   if (!bill.id) throw new Error('Bill has no id');
   validatePaymentAmount(bill, amountReceived);
 
-  return db.transaction('rw', [db.bills, db.receipts, db.payments, db.settings], async () => {
+  return db.transaction('rw', [db.bills, db.receipts, db.payments, db.settings, db.auditLog], async () => {
     // Re-read the bill inside the transaction in case it changed since the
     // caller loaded it (e.g. another payment was just recorded) - avoids a
     // stale-read race that could double-apply or miscalculate the balance.
@@ -134,7 +135,7 @@ export async function recordPaymentForBill(
       voided: false,
     });
 
-    await db.payments.add({
+    const paymentId = await db.payments.add({
       date: todayISO(),
       invoiceId: freshBill.id!,
       receiptId: receiptId as number,
@@ -145,6 +146,13 @@ export async function recordPaymentForBill(
       amount: amountReceived,
       type: status === 'paid' ? 'Full' : 'Partial',
       voided: false,
+    });
+
+    await logAudit({
+      action: 'payment_recorded', entityType: 'payment', entityId: paymentId as number,
+      buildingId: freshBill.buildingId, flatId: freshBill.flatId, residentId: freshBill.residentId,
+      amount: amountReceived,
+      summary: `Payment of ${amountReceived.toFixed(2)} recorded against invoice ${freshBill.invoiceNo} (${method})`,
     });
 
     const receipt = await db.receipts.get(receiptId as number);
@@ -165,12 +173,18 @@ export async function permanentlyDeleteVoidedPayment(payment: Payment) {
   if (!payment.voided) {
     throw new Error('Only voided payments can be permanently deleted. Void it first.');
   }
-  await db.transaction('rw', [db.payments, db.receipts], async () => {
+  await db.transaction('rw', [db.payments, db.receipts, db.auditLog], async () => {
     await db.payments.delete(payment.id!);
     if (payment.receiptId) {
       const receipt = await db.receipts.get(payment.receiptId);
       if (receipt?.voided) await db.receipts.delete(payment.receiptId);
     }
+    await logAudit({
+      action: 'payment_deleted', entityType: 'payment', entityId: payment.id,
+      buildingId: payment.buildingId, flatId: payment.flatId, residentId: payment.residentId,
+      amount: payment.amount,
+      summary: `Permanently deleted voided payment of ${payment.amount.toFixed(2)}`,
+    });
   });
 }
 
@@ -183,7 +197,7 @@ export async function voidPayment(payment: Payment, reason: string) {
   if (!payment.id) return;
   if (payment.voided) return; // already voided, nothing to do
 
-  await db.transaction('rw', [db.bills, db.receipts, db.payments], async () => {
+  await db.transaction('rw', [db.bills, db.receipts, db.payments, db.auditLog], async () => {
     const bill = await db.bills.get(payment.invoiceId);
     if (bill && bill.id) {
       const newPaid = Math.max(0, bill.paidAmount - payment.amount);
@@ -199,6 +213,14 @@ export async function voidPayment(payment: Payment, reason: string) {
         voided: true, voidedAt: new Date().toISOString(), voidReason: reason,
       });
     }
+
+    await logAudit({
+      action: 'payment_voided', entityType: 'payment', entityId: payment.id,
+      buildingId: payment.buildingId, flatId: payment.flatId, residentId: payment.residentId,
+      amount: payment.amount,
+      summary: `Voided payment of ${payment.amount.toFixed(2)}`,
+      details: `Reason: ${reason}`,
+    });
   });
 }
 
@@ -221,7 +243,16 @@ export async function voidBill(bill: Bill, reason: string) {
     throw new BillVoidError('This invoice has active payments against it. Void those payments first (from the Payments page), then void the invoice.');
   }
 
-  await db.bills.update(bill.id, { voided: true, voidedAt: new Date().toISOString(), voidReason: reason.trim() });
+  await db.transaction('rw', [db.bills, db.auditLog], async () => {
+    await db.bills.update(bill.id!, { voided: true, voidedAt: new Date().toISOString(), voidReason: reason.trim() });
+    await logAudit({
+      action: 'bill_voided', entityType: 'bill', entityId: bill.id,
+      buildingId: bill.buildingId, flatId: bill.flatId, residentId: bill.residentId,
+      amount: bill.totalAmount,
+      summary: `Voided invoice ${bill.invoiceNo} (${bill.totalAmount.toFixed(2)})`,
+      details: `Reason: ${reason.trim()}`,
+    });
+  });
 }
 
 /**
@@ -237,5 +268,13 @@ export async function permanentlyDeleteVoidedBill(bill: Bill) {
   if (stillLinked.some((p) => !p.voided)) {
     throw new BillVoidError('This invoice still has active payments linked to it and cannot be deleted.');
   }
-  await db.bills.delete(bill.id);
+  await db.transaction('rw', [db.bills, db.auditLog], async () => {
+    await db.bills.delete(bill.id!);
+    await logAudit({
+      action: 'bill_deleted', entityType: 'bill', entityId: bill.id,
+      buildingId: bill.buildingId, flatId: bill.flatId, residentId: bill.residentId,
+      amount: bill.totalAmount,
+      summary: `Permanently deleted voided invoice ${bill.invoiceNo}`,
+    });
+  });
 }

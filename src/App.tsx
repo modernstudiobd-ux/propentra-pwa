@@ -21,6 +21,8 @@ import Expenses from '@/pages/Expenses';
 import Reminders from '@/pages/Reminders';
 import Documents from '@/pages/Documents';
 import Timeline from '@/pages/Timeline';
+import AuditLog from '@/pages/AuditLog';
+import AuditLog from '@/pages/AuditLog';
 
 function SetupRoute() {
   const navigate = useNavigate();
@@ -71,6 +73,8 @@ export default function App() {
           <Route path="/reminders" element={<Reminders />} />
           <Route path="/documents" element={<Documents />} />
           <Route path="/timeline" element={<Timeline />} />
+          <Route path="/audit-log" element={<AuditLog />} />
+          <Route path="/audit-log" element={<AuditLog />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/backup" element={<BackupRestore />} />

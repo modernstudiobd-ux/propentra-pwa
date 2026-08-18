@@ -1,8 +1,9 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Building, Flat, Resident, Bill, Receipt, Payment, CompanySettings,
-  DepositTransaction, MaintenanceRequest, Expense, Reminder, DocumentRecord,
+  DepositTransaction, MaintenanceRequest, Expense, Reminder, DocumentRecord, AuditLogEntry,
 } from '@/types';
+import { base64ToBlob } from '@/lib/fileValidation';
 
 export class BuildingBillDB extends Dexie {
   buildings!: Table<Building, number>;
@@ -17,6 +18,7 @@ export class BuildingBillDB extends Dexie {
   expenses!: Table<Expense, number>;
   reminders!: Table<Reminder, number>;
   documents!: Table<DocumentRecord, number>;
+  auditLog!: Table<AuditLogEntry, number>;
 
   constructor() {
     super('buildingbill-db');
@@ -87,6 +89,39 @@ export class BuildingBillDB extends Dexie {
         });
         await tx.table('receipts').toCollection().modify((r: any) => {
           if (r.voided === undefined) r.voided = false;
+        });
+      });
+
+    // v4: adds the audit log; migrates resident ID document photos from
+    // base64 strings to native Blobs (smaller, faster, consistent with how
+    // the Documents module already stores files).
+    this.version(4)
+      .stores({
+        buildings: '++id, name',
+        flats: '++id, buildingId, unitNo, status',
+        residents: '++id, name, buildingId, flatId, type, status',
+        bills: '++id, invoiceNo, buildingId, flatId, residentId, status, billingMonth',
+        receipts: '++id, receiptNo, invoiceId, residentId, voided',
+        payments: '++id, invoiceId, residentId, date, voided',
+        settings: '++id',
+        depositTransactions: '++id, residentId, buildingId, flatId, type, date',
+        maintenanceRequests: '++id, buildingId, flatId, status, priority, reportedDate',
+        expenses: '++id, buildingId, flatId, category, date',
+        reminders: '++id, dueDate, status, priority, linkType, linkId',
+        documents: '++id, linkType, linkId, buildingId, category, expiryDate',
+        auditLog: '++id, entityType, entityId, action, timestamp, residentId',
+      })
+      .upgrade(async (tx) => {
+        await tx.table('residents').toCollection().modify((r: any) => {
+          if (typeof r.idDocumentImage === 'string' && r.idDocumentImage.startsWith('data:')) {
+            try {
+              r.idDocumentBlob = base64ToBlob(r.idDocumentImage);
+              r.idDocumentFileType = r.idDocumentBlob.type;
+            } catch {
+              // leave the legacy base64 field alone if it fails to parse - nothing lost
+            }
+            delete r.idDocumentImage;
+          }
         });
       });
   }

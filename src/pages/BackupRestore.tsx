@@ -1,44 +1,9 @@
 import { useRef, useState } from 'react';
-import { db } from '@/lib/db';
 import { Download, UploadCloud, Info, AlertTriangle } from 'lucide-react';
-import { blobToBase64, base64ToBlob } from '@/lib/fileValidation';
-
-// Bump this whenever the backup file's shape changes in a way that affects
-// how restore should interpret it. Restore uses this to decide whether it
-// can safely import a file (older backups are fine; newer/unknown ones are
-// rejected rather than silently importing data restore doesn't understand).
-const BACKUP_FORMAT_VERSION = 2;
-
-const TABLES = [
-  'buildings', 'flats', 'residents', 'bills', 'receipts', 'payments', 'settings',
-  'depositTransactions', 'maintenanceRequests', 'expenses', 'reminders', 'documents',
-] as const;
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v);
-}
-
-/**
- * Validates the overall shape of a backup file before touching the
- * database at all: right format version, and every table present is
- * actually an array of plain objects. This is intentionally not deep
- * per-record validation (a backup is trusted data you made yourself) - it's
- * a guard against corrupted files, wrong file types, and future format
- * changes, not a full schema validator.
- */
-function validateBackupShape(data: unknown): string | null {
-  if (!isPlainObject(data)) return 'This file is not a valid BuildingBill backup (not a JSON object).';
-  if (typeof data.version !== 'number') return 'This file is missing a version number - it may not be a BuildingBill backup.';
-  if (data.version > BACKUP_FORMAT_VERSION) {
-    return `This backup was made with a newer version of BuildingBill (format v${data.version}, this app supports up to v${BACKUP_FORMAT_VERSION}). Update the app before restoring it.`;
-  }
-  for (const table of TABLES) {
-    if (table in data && !Array.isArray((data as any)[table])) {
-      return `The "${table}" section of this backup is corrupted (expected a list, got something else).`;
-    }
-  }
-  return null;
-}
+import { logAudit } from '@/lib/audit';
+import {
+  TABLES, validateBackupShape, buildBackupData, countBackupRows, restoreFromBackupData,
+} from '@/lib/backup';
 
 export default function BackupRestore() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -47,24 +12,7 @@ export default function BackupRestore() {
   const [confirming, setConfirming] = useState<{ data: Record<string, any[]>; counts: Record<string, number> } | null>(null);
 
   async function backupNow() {
-    const data: Record<string, unknown> = {
-      version: BACKUP_FORMAT_VERSION,
-      exportedAt: new Date().toISOString(),
-      appName: 'BuildingBill',
-    };
-    for (const table of TABLES) {
-      const rows = await (db as any)[table].toArray();
-      if (table === 'documents') {
-        // JSON can't hold a Blob directly - encode each document's file as
-        // base64 just for the backup file. Storage stays Blob-based day to
-        // day; this conversion only happens at export/import time.
-        data[table] = await Promise.all(
-          rows.map(async (r: any) => ({ ...r, fileData: r.fileData instanceof Blob ? await blobToBase64(r.fileData) : r.fileData }))
-        );
-      } else {
-        data[table] = rows;
-      }
-    }
+    const { data, counts } = await buildBackupData();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -72,6 +20,10 @@ export default function BackupRestore() {
     a.download = `buildingbill-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    await logAudit({
+      action: 'backup_created', entityType: 'backup',
+      summary: `Backup downloaded (${TABLES.map((t) => `${t}: ${counts[t]}`).join(', ')})`,
+    });
     setStatus({ kind: 'ok', message: 'Backup downloaded.' });
   }
 
@@ -94,33 +46,17 @@ export default function BackupRestore() {
       return;
     }
     const obj = data as Record<string, any[]>;
-    const counts: Record<string, number> = {};
-    for (const table of TABLES) counts[table] = Array.isArray(obj[table]) ? obj[table].length : 0;
-    setConfirming({ data: obj, counts });
+    setConfirming({ data: obj, counts: countBackupRows(obj) });
   }
 
   async function confirmRestore() {
     if (!confirming) return;
-    const { data } = confirming;
     try {
       // Atomic: every table is cleared and repopulated inside one Dexie
       // transaction. If anything fails partway through, Dexie rolls the
       // whole transaction back - you never end up with half-old,
       // half-new data.
-      await db.transaction('rw', TABLES.map((t) => (db as any)[t]), async () => {
-        for (const table of TABLES) {
-          await (db as any)[table].clear();
-        }
-        for (const table of TABLES) {
-          const rows = data[table];
-          if (Array.isArray(rows) && rows.length > 0) {
-            const toInsert = table === 'documents'
-              ? rows.map((r: any) => ({ ...r, fileData: typeof r.fileData === 'string' ? base64ToBlob(r.fileData) : r.fileData }))
-              : rows;
-            await (db as any)[table].bulkAdd(toInsert);
-          }
-        }
-      });
+      await restoreFromBackupData(confirming.data);
       setConfirming(null);
       setStatus({ kind: 'ok', message: 'Data restored successfully. Reloading...' });
       setTimeout(() => window.location.reload(), 1200);

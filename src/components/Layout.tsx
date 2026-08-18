@@ -18,6 +18,8 @@ const titles: Record<string, string> = {
   '/reminders': 'Reminders',
   '/documents': 'Documents',
   '/timeline': 'Timeline',
+  '/audit-log': 'Audit Log',
+  '/audit-log': 'Audit Log',
   '/reports': 'Reports',
   '/settings': 'Settings',
   '/backup': 'Backup & Restore',
