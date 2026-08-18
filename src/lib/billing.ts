@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
-import type { Bill, Payment } from '@/types';
+import type { Bill, Payment, CompanySettings } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 
@@ -22,7 +22,9 @@ async function nextSeq(field: 'nextInvoiceSeq' | 'nextReceiptSeq', bootstrapFrom
     if (!settings?.id) throw new Error('Settings not initialized yet - reload the app and try again.');
     let seq = settings[field];
     if (seq === undefined) seq = await bootstrapFrom();
-    await db.settings.update(settings.id, { [field]: seq + 1 });
+    const update: Partial<CompanySettings> =
+      field === 'nextInvoiceSeq' ? { nextInvoiceSeq: seq + 1 } : { nextReceiptSeq: seq + 1 };
+    await db.settings.update(settings.id, update);
     return seq;
   });
 }

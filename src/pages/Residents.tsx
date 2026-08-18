@@ -275,7 +275,11 @@ export default function Residents() {
                         {isBillingContactOf(r) && statusOf(r) === 'current' && (
                           <span className="text-[10px] text-brand-500 font-medium">● billed</span>
                         )}
-                        {r.idNumber && <IdCard size={13} className="text-gray-400" aria-label="ID on file" title={`ID on file: ${maskIdNumber(r.idNumber)}`} />}
+                        {r.idNumber && (
+                          <span title={`ID on file: ${maskIdNumber(r.idNumber)}`}>
+                            <IdCard size={13} className="text-gray-400" aria-label="ID on file" />
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-400 mt-1">{r.mobile || '—'} · {r.email || '—'}</div>
                       {statusOf(r) === 'former' && r.moveOutDate && <div className="text-[10px] text-gray-400 mt-0.5">Moved out {dateLabel(r.moveOutDate)}</div>}
