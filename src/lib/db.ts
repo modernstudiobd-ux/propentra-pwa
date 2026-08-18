@@ -5,7 +5,7 @@ import type {
 } from '@/types';
 import { base64ToBlob } from '@/lib/fileValidation';
 
-export class BuildingBillDB extends Dexie {
+export class PropentraDB extends Dexie {
   buildings!: Table<Building, number>;
   flats!: Table<Flat, number>;
   residents!: Table<Resident, number>;
@@ -21,6 +21,10 @@ export class BuildingBillDB extends Dexie {
   auditLog!: Table<AuditLogEntry, number>;
 
   constructor() {
+    // The physical IndexedDB name is intentionally left as-is even after the
+    // "BuildingBill" -> "Propentra" rebrand: renaming it would make Dexie
+    // open a brand-new, empty database and orphan everyone's existing local
+    // data. Only user-facing text changed.
     super('buildingbill-db');
 
     // v1: original schema (kept only so upgrade() below can read old data safely)
@@ -127,7 +131,7 @@ export class BuildingBillDB extends Dexie {
   }
 }
 
-export const db = new BuildingBillDB();
+export const db = new PropentraDB();
 
 // If another tab has an older version of this database open, IndexedDB
 // blocks the upgrade indefinitely with no error and no timeout - the app
@@ -135,7 +139,7 @@ export const db = new BuildingBillDB();
 // recoverable: the tab holding the old connection closes it and reloads,
 // which lets the upgrade in the other tab proceed.
 db.on('blocked', () => {
-  console.warn('BuildingBill: database upgrade blocked by another open tab.');
+  console.warn('Propentra: database upgrade blocked by another open tab.');
 });
 db.on('versionchange', () => {
   db.close();

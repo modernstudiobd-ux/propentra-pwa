@@ -35,10 +35,10 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
  * changes, not a full schema validator.
  */
 export function validateBackupShape(data: unknown): string | null {
-  if (!isPlainObject(data)) return 'This file is not a valid BuildingBill backup (not a JSON object).';
-  if (typeof data.version !== 'number') return 'This file is missing a version number - it may not be a BuildingBill backup.';
+  if (!isPlainObject(data)) return 'This file is not a valid Propentra backup (not a JSON object).';
+  if (typeof data.version !== 'number') return 'This file is missing a version number - it may not be a Propentra backup.';
   if (data.version > BACKUP_FORMAT_VERSION) {
-    return `This backup was made with a newer version of BuildingBill (format v${data.version}, this app supports up to v${BACKUP_FORMAT_VERSION}). Update the app before restoring it.`;
+    return `This backup was made with a newer version of Propentra (format v${data.version}, this app supports up to v${BACKUP_FORMAT_VERSION}). Update the app before restoring it.`;
   }
   for (const table of TABLES) {
     if (table in data && !Array.isArray((data as any)[table])) {
@@ -53,7 +53,7 @@ export async function buildBackupData(): Promise<{ data: Record<string, unknown>
   const data: Record<string, unknown> = {
     version: BACKUP_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
-    appName: 'BuildingBill',
+    appName: 'Propentra',
   };
   const counts: Record<string, number> = {};
   for (const table of TABLES) {

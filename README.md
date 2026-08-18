@@ -1,4 +1,4 @@
-# BuildingBill — Smart Building Management Dashboard
+# Propentra — Property Management & Billing
 
 A fully client-side PWA (no backend/server needed). All data is stored locally in the browser via **IndexedDB**. Deployable free on **GitHub Pages**.
 

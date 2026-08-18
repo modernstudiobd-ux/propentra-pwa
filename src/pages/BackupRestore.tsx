@@ -17,7 +17,7 @@ export default function BackupRestore() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `buildingbill-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `propentra-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
     await logAudit({

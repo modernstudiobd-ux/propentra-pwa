@@ -30,6 +30,6 @@ function timeout(ms: number) {
 
 Promise.race([
   seedIfEmpty().catch((err) => console.error('Seeding failed (app will still load):', err)),
-  timeout(4000).then(() => console.warn('BuildingBill: startup is taking unusually long (database may be blocked by another tab) - loading the app shell anyway.')),
+  timeout(4000).then(() => console.warn('Propentra: startup is taking unusually long (database may be blocked by another tab) - loading the app shell anyway.')),
 ]).finally(renderOnce);
 

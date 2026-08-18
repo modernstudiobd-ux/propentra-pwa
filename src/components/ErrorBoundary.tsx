@@ -10,7 +10,7 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, St
   }
 
   componentDidCatch(error: Error, info: any) {
-    console.error('BuildingBill crashed:', error, info);
+    console.error('Propentra crashed:', error, info);
   }
 
   render() {
@@ -25,7 +25,7 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, St
               Something went wrong
             </h1>
             <p style={{ color: '#64748b', fontSize: 14, marginBottom: 12 }}>
-              BuildingBill hit an error while loading. Try reloading the page. If it keeps happening,
+              Propentra hit an error while loading. Try reloading the page. If it keeps happening,
               open your browser's developer console (F12 → Console tab) and check the error below.
             </p>
             <pre style={{

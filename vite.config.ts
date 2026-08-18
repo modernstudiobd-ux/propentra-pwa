@@ -19,8 +19,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
-        name: 'BuildingBill - Smart Building Management',
-        short_name: 'BuildingBill',
+        name: 'Propentra - Property Management & Billing',
+        short_name: 'Propentra',
         description: 'Manage buildings, flats, tenants, billing, invoices and payments.',
         theme_color: '#1e3a8a',
         background_color: '#ffffff',

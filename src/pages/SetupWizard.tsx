@@ -120,7 +120,7 @@ export default function SetupWizard({ onFinish }: { onFinish: () => void }) {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-lg bg-brand-500 flex items-center justify-center text-white font-bold">B</div>
-            <span className="font-display font-bold text-gray-800">BuildingBill Setup</span>
+            <span className="font-display font-bold text-gray-800">Propentra Setup</span>
           </div>
           {step > 0 && step < steps.length - 1 && (
             <button onClick={skipAll} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
@@ -142,7 +142,7 @@ export default function SetupWizard({ onFinish }: { onFinish: () => void }) {
               <div className="w-14 h-14 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center mx-auto">
                 <Building2 size={28} />
               </div>
-              <h2 className="text-xl font-display font-bold text-gray-800">Welcome to BuildingBill</h2>
+              <h2 className="text-xl font-display font-bold text-gray-800">Welcome to Propentra</h2>
               <p className="text-sm text-gray-500">
                 Let's get your account set up. This takes about a minute — you can skip any step and fill it in later
                 from the sidebar. Everything you enter stays on this device.

@@ -71,10 +71,10 @@ export default function Sidebar({ open, onClose }: { open: boolean; onClose: () 
       >
         <div className="flex items-center justify-between px-4 h-16 border-b border-white/[0.06]">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-brand-500 flex items-center justify-center font-semibold">B</div>
+            <div className="w-9 h-9 rounded-xl bg-brand-500 flex items-center justify-center font-semibold">P</div>
             <div>
-              <div className="font-semibold leading-tight">BuildingBill</div>
-              <div className="text-[11px] text-gray-400 leading-tight">Smart Building Management</div>
+              <div className="font-semibold leading-tight">Propentra</div>
+              <div className="text-[11px] text-gray-400 leading-tight">Property Management &amp; Billing</div>
             </div>
           </div>
           <button className="md:hidden text-gray-400" onClick={onClose}><X size={20} /></button>

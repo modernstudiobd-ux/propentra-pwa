@@ -28,7 +28,7 @@ const titles: Record<string, string> = {
 export default function Layout() {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
-  const title = titles[pathname] ?? 'BuildingBill';
+  const title = titles[pathname] ?? 'Propentra';
 
   return (
     <div className="min-h-screen flex bg-gray-50">
