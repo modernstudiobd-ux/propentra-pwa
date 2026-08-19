@@ -12,10 +12,76 @@
 <body>
   <noscript>This app requires JavaScript to run.</noscript>
   <div id="root">
-    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;color:#64748b;">
-      Loading Propentra…
+    <div id="boot-loading" style="min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;color:#64748b;padding:24px;">
+      <div style="text-align:center;max-width:420px;">
+        <div>Loading Propentra…</div>
+        <div id="boot-help" style="display:none;margin-top:16px;font-size:13px;line-height:1.5;">
+          <div style="margin-bottom:10px;">This is taking longer than expected. This usually means another open browser tab of this app is blocking startup, or the local data got into a bad state.</div>
+          <div id="boot-error" style="color:#dc2626;font-family:monospace;font-size:11px;margin-bottom:10px;word-break:break-word;"></div>
+          <button id="boot-reload" style="padding:8px 14px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;margin-right:8px;">Reload</button>
+          <button id="boot-reset" style="padding:8px 14px;border-radius:8px;border:none;background:#dc2626;color:#fff;cursor:pointer;">Reset local data &amp; reload</button>
+          <div style="margin-top:8px;font-size:11px;color:#94a3b8;">"Reset local data" permanently erases everything stored in this browser (buildings, tenants, invoices...). Only use it if a backup was exported, or startup is completely broken.</div>
+        </div>
+      </div>
     </div>
   </div>
+  <script>
+    // Plain, dependency-free script (not type="module") so this still runs
+    // even if the app bundle itself fails to download or throws while
+    // parsing/executing - the one scenario where the module script below,
+    // and everything inside main.tsx, never gets a chance to run at all.
+    window.addEventListener('error', function (e) {
+      var el = document.getElementById('boot-error');
+      if (el && !el.textContent) el.textContent = (e.message || 'Unknown error') + (e.filename ? ' (' + e.filename + ':' + e.lineno + ')' : '');
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      var el = document.getElementById('boot-error');
+      if (el && !el.textContent) el.textContent = 'Unhandled promise rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason);
+    });
+    setTimeout(function () {
+      // If #root's content was never replaced by React, we're still on the
+      // static loading screen after a generous grace period - show the
+      // recovery options instead of leaving a blank spinner forever.
+      if (document.getElementById('boot-loading')) {
+        document.getElementById('boot-help').style.display = 'block';
+      }
+    }, 6000);
+    document.addEventListener('click', function (e) {
+      if (e.target && e.target.id === 'boot-reload') location.reload();
+      if (e.target && e.target.id === 'boot-reset') {
+        // On GitHub Pages this is a PWA - a stale service worker caching an
+        // old app shell after a new deploy is the single most common cause
+        // of a permanent stuck-loading screen (it keeps trying to load JS
+        // files that no longer exist on the server). Clear everything:
+        // service workers, the Cache Storage they use, and IndexedDB.
+        var tasks = [];
+        if (navigator.serviceWorker) {
+          tasks.push(
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              return Promise.all(regs.map(function (r) { return r.unregister(); }));
+            })
+          );
+        }
+        if (window.caches) {
+          tasks.push(
+            caches.keys().then(function (keys) {
+              return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+            })
+          );
+        }
+        tasks.push(new Promise(function (resolve) {
+          var req = indexedDB.deleteDatabase('buildingbill-db');
+          req.onsuccess = resolve;
+          req.onerror = resolve;
+          req.onblocked = function () {
+            alert('Please close any other open tabs of this app, then click Reset again.');
+            resolve();
+          };
+        }));
+        Promise.all(tasks).finally(function () { location.reload(); });
+      }
+    });
+  </script>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
