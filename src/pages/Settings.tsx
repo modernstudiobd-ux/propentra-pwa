@@ -5,6 +5,7 @@ import type { CompanySettings } from '@/types';
 import { Building2, SlidersHorizontal, FileText, Receipt, Wallet, CreditCard, DatabaseBackup, PenTool, Trash2 } from 'lucide-react';
 import Modal from '@/components/Modal';
 import SignaturePad from '@/components/SignaturePad';
+import { validateImageFile } from '@/lib/fileValidation';
 
 const sections = [
   { key: 'company', label: 'Landlord / Company', icon: Building2 },
@@ -22,6 +23,7 @@ export default function SettingsPage() {
   const [form, setForm] = useState<CompanySettings | null>(null);
   const [signaturePadOpen, setSignaturePadOpen] = useState(false);
   const [newMethod, setNewMethod] = useState('');
+  const [logoError, setLogoError] = useState('');
 
   useEffect(() => { if (settings) setForm(settings); }, [settings?.id]);
 
@@ -33,10 +35,20 @@ export default function SettingsPage() {
 
   function onLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same filename later
     if (!file || !form) return;
+    const err = validateImageFile(file, 2);
+    if (err) { setLogoError(err); return; }
+    setLogoError('');
     const reader = new FileReader();
     reader.onload = () => setForm({ ...form, logo: reader.result as string });
     reader.readAsDataURL(file);
+  }
+
+  function removeLogo() {
+    if (!form) return;
+    setForm({ ...form, logo: '' });
+    setLogoError('');
   }
 
   function onSignatureUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -101,14 +113,20 @@ export default function SettingsPage() {
             <div>
               <label className="label">Logo</label>
               <div className="flex items-center gap-3">
-                <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden">
+                <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
                   {form.logo ? <img src={form.logo} className="w-full h-full object-cover" /> : <Building2 className="text-gray-400" />}
                 </div>
                 <label className="btn-secondary cursor-pointer text-sm">
-                  Change Logo
+                  {form.logo ? 'Change Logo' : 'Upload Logo'}
                   <input type="file" accept="image/*" className="hidden" onChange={onLogoChange} />
                 </label>
+                {form.logo && (
+                  <button type="button" onClick={removeLogo} className="text-red-400 hover:text-red-600 text-sm flex items-center gap-1">
+                    <Trash2 size={14} /> Remove
+                  </button>
+                )}
               </div>
+              {logoError && <div className="text-xs text-red-500 mt-1">{logoError}</div>}
               <div className="text-[11px] text-gray-400 mt-1">JPG, PNG (Max 2MB)</div>
             </div>
             <button onClick={save} className="btn-primary">Save Changes</button>

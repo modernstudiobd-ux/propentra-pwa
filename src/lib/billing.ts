@@ -38,7 +38,7 @@ export async function genInvoiceNo() {
     }, 75);
     return maxSeq + 1;
   });
-  return `INV-2026-${String(seq).padStart(3, '0')}`;
+  return `INV-${new Date().getFullYear()}-${String(seq).padStart(3, '0')}`;
 }
 
 export async function genReceiptNo() {
@@ -50,7 +50,7 @@ export async function genReceiptNo() {
     }, 42);
     return maxSeq + 1;
   });
-  return `RCPT-2026-${String(seq).padStart(4, '0')}`;
+  return `RCPT-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`;
 }
 
 function statusFor(bill: Bill, paidAmount: number): Bill['status'] {

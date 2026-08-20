@@ -13,13 +13,15 @@ beforeEach(async () => {
 });
 
 describe('invoice / receipt numbering', () => {
+  const year = new Date().getFullYear();
+
   it('generates sequential, monotonically increasing invoice numbers', async () => {
     const a = await genInvoiceNo();
     const b = await genInvoiceNo();
     const c = await genInvoiceNo();
-    expect(a).toBe('INV-2026-076');
-    expect(b).toBe('INV-2026-077');
-    expect(c).toBe('INV-2026-078');
+    expect(a).toBe(`INV-${year}-076`);
+    expect(b).toBe(`INV-${year}-077`);
+    expect(c).toBe(`INV-${year}-078`);
   });
 
   it('never reuses a number, even after the bill using it is deleted', async () => {
@@ -38,8 +40,15 @@ describe('invoice / receipt numbering', () => {
   it('generates sequential receipt numbers independently of invoice numbers', async () => {
     const a = await genReceiptNo();
     const b = await genReceiptNo();
-    expect(a).toBe('RCPT-2026-0043');
-    expect(b).toBe('RCPT-2026-0044');
+    expect(a).toBe(`RCPT-${year}-0043`);
+    expect(b).toBe(`RCPT-${year}-0044`);
+  });
+
+  it('uses the current calendar year in the number, not a hardcoded one', async () => {
+    const invoiceNo = await genInvoiceNo();
+    const receiptNo = await genReceiptNo();
+    expect(invoiceNo).toContain(`-${year}-`);
+    expect(receiptNo).toContain(`-${year}-`);
   });
 });
 
