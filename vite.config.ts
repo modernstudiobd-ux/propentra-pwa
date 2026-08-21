@@ -10,6 +10,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // https://<username>.github.io/<repo-name>/  ->  base: '/<repo-name>/'
 export default defineConfig({
   base: './',
+  build: {
+    outDir: 'dist/app',
+    emptyOutDir: true
+  },
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') }
   },

@@ -1,0 +1,516 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1024" width="100%" height="100%" style="background-color: #f4f6f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  
+  <defs>
+    <!-- Card Shadow -->
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="108%" filterUnits="objectBoundingBox">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.04" />
+    </filter>
+    
+    <!-- Donut Chart Segment Clip Paths -->
+    <clipPath id="circle-clip">
+      <rect x="0" y="0" width="1280" height="1024" />
+    </clipPath>
+  </defs>
+
+  <!-- ==================== SIDEBAR ==================== -->
+  <rect x="0" y="0" width="230" height="1024" fill="#121621" />
+
+  <!-- Logo Area -->
+  <g transform="translate(20, 20)">
+    <rect x="0" y="0" width="32" height="32" rx="8" fill="#2563eb" />
+    <text x="16" y="21" fill="#ffffff" font-size="18" font-weight="bold" text-anchor="middle">P</text>
+    <text x="44" y="18" fill="#ffffff" font-size="16" font-weight="700" letter-spacing="0.5">Propentra</text>
+    <text x="44" y="29" fill="#6b7280" font-size="9" font-weight="500">Property Management &amp; Billing</text>
+  </g>
+
+  <!-- Navigation Menu -->
+  <!-- Active Item: Dashboard -->
+  <g transform="translate(12, 76)">
+    <rect x="0" y="0" width="206" height="40" rx="8" fill="#2563eb" />
+    <!-- Grid Icon -->
+    <path d="M12 10h4v4h-4zM18 10h4v4h-4zM12 16h4v4h-4zM18 16h4v4h-4z" fill="#ffffff" />
+    <text x="40" y="25" fill="#ffffff" font-size="13" font-weight="600">Dashboard</text>
+  </g>
+
+  <!-- Nav Item: Buildings -->
+  <g transform="translate(12, 124)">
+    <path d="M14 10v10h8V10h-8zm2 2h1v2h-1v-2zm0 4h1v2h-1v-2zm4-4h1v2h-1v-2zm0 4h1v2h-1v-2z" fill="#9ca3af" />
+    <text x="40" y="22" fill="#9ca3af" font-size="13" font-weight="500">Buildings</text>
+  </g>
+
+  <!-- Nav Item: Flats -->
+  <g transform="translate(12, 164)">
+    <path d="M11 10h10v10H11z" fill="none" stroke="#9ca3af" stroke-width="1.5" />
+    <text x="40" y="22" fill="#9ca3af" font-size="13" font-weight="500">Flats</text>
+  </g>
+
+  <!-- Nav Item: Residents -->
+  <g transform="translate(12, 204)">
+    <circle cx="15" cy="14" r="3" fill="#9ca3af" />
+    <path d="M10 21c0-2.5 2-4 5-4s5 1.5 5 4" fill="none" stroke="#9ca3af" stroke-width="1.5" />
+    <text x="40" y="22" fill="#9ca3af" font-size="13" font-weight="500">Residents</text>
+  </g>
+
+  <!-- Nav Section: Billing -->
+  <g transform="translate(12, 244)">
+    <path d="M10 11h12v10H10z" fill="none" stroke="#9ca3af" stroke-width="1.5" />
+    <text x="40" y="22" fill="#9ca3af" font-size="13" font-weight="500">Billing</text>
+    <path d="M190 18l-4-4-4 4" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" />
+  </g>
+
+  <!-- Sub-items -->
+  <g transform="translate(12, 280)">
+    <text x="40" y="18" fill="#9ca3af" font-size="12" font-weight="500">Billing Center</text>
+    <text x="40" y="50" fill="#9ca3af" font-size="12" font-weight="500">Bills History</text>
+  </g>
+
+  <!-- Other Nav Items -->
+  <g transform="translate(12, 350)">
+    <!-- Payments -->
+    <text x="40" y="18" fill="#9ca3af" font-size="13" font-weight="500">Payments</text>
+    <circle cx="16" cy="14" r="5" fill="none" stroke="#9ca3af" stroke-width="1.5" />
+    
+    <!-- Deposits & Advances -->
+    <text x="40" y="58" fill="#9ca3af" font-size="13" font-weight="500">Deposits &amp; Advances</text>
+    <rect x="11" y="50" width="10" height="10" fill="none" stroke="#9ca3af" stroke-width="1.5" />
+
+    <!-- Maintenance -->
+    <text x="40" y="108" fill="#9ca3af" font-size="13" font-weight="500">Maintenance</text>
+    
+    <!-- Expenses -->
+    <text x="40" y="148" fill="#9ca3af" font-size="13" font-weight="500">Expenses</text>
+    
+    <!-- Reminders -->
+    <text x="40" y="188" fill="#9ca3af" font-size="13" font-weight="500">Reminders</text>
+    
+    <!-- Documents -->
+    <text x="40" y="228" fill="#9ca3af" font-size="13" font-weight="500">Documents</text>
+    
+    <!-- Timeline -->
+    <text x="40" y="268" fill="#9ca3af" font-size="13" font-weight="500">Timeline</text>
+    
+    <!-- Audit Log -->
+    <text x="40" y="308" fill="#9ca3af" font-size="13" font-weight="500">Audit Log</text>
+    
+    <!-- Reports -->
+    <text x="40" y="348" fill="#9ca3af" font-size="13" font-weight="500">Reports</text>
+  </g>
+
+  <!-- Sidebar Widget: Offline Mode -->
+  <g transform="translate(12, 910)">
+    <rect x="0" y="0" width="206" height="90" rx="10" fill="#1e2430" />
+    <circle cx="20" cy="22" r="8" fill="#059669" fill-opacity="0.2" />
+    <circle cx="20" cy="22" r="4" fill="#10b981" />
+    <text x="36" y="26" fill="#ffffff" font-size="12" font-weight="600">Offline Mode</text>
+    <text x="16" y="44" fill="#9ca3af" font-size="10">Your data is safe on this device</text>
+    
+    <!-- Storage Progress Bar -->
+    <text x="16" y="68" fill="#6b7280" font-size="10">Storage used</text>
+    <text x="190" y="68" fill="#9ca3af" font-size="10" text-anchor="end">34.6 MB / 100 GB</text>
+    <rect x="16" y="74" width="174" height="4" rx="2" fill="#374151" />
+    <rect x="16" y="74" width="30" height="4" rx="2" fill="#2563eb" />
+  </g>
+
+  <!-- ==================== HEADER ==================== -->
+  <g transform="translate(230, 0)">
+    <rect x="0" y="0" width="1050" height="70" fill="#ffffff" />
+    <line x1="0" y1="70" x2="1050" y2="70" stroke="#e5e7eb" stroke-width="1" />
+
+    <!-- Page Title -->
+    <text x="30" y="42" fill="#111827" font-size="22" font-weight="700">Dashboard</text>
+
+    <!-- Search Bar -->
+    <g transform="translate(170, 16)">
+      <rect x="0" y="0" width="380" height="38" rx="8" fill="#f3f4f6" />
+      <path d="M15 13a5 5 0 10-10 0 5 5 0 0010 0zm-1.1 4.3l3.4 3.4" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" />
+      <text x="38" y="24" fill="#9ca3af" font-size="13">Search buildings, flats, residents, invoices...</text>
+    </g>
+
+    <!-- Header Right Actions -->
+    <!-- Notifications -->
+    <g transform="translate(930, 22)">
+      <path d="M6 16a2 2 0 002 2h8a2 2 0 002-2V10a6 6 0 00-12 0v6z" fill="none" stroke="#4b5563" stroke-width="1.8" />
+      <circle cx="16" cy="6" r="4" fill="#ef4444" />
+    </g>
+
+    <!-- User Avatar -->
+    <g transform="translate(970, 17)">
+      <circle cx="18" cy="18" r="18" fill="#2563eb" />
+      <text x="18" y="23" fill="#ffffff" font-size="12" font-weight="600" text-anchor="middle">MS</text>
+    </g>
+  </g>
+
+  <!-- ==================== MAIN CONTENT AREA ==================== -->
+  <g transform="translate(230, 70)">
+
+    <!-- Filter Dropdowns & Primary Action -->
+    <g transform="translate(30, 20)">
+      <!-- Building Filter -->
+      <rect x="0" y="0" width="140" height="36" rx="8" fill="#ffffff" stroke="#e5e7eb" />
+      <text x="16" y="23" fill="#111827" font-size="13" font-weight="500">All Buildings</text>
+      <path d="M115 16l4 4 4-4" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" />
+
+      <!-- Month Filter -->
+      <rect x="152" y="0" width="130" height="36" rx="8" fill="#ffffff" stroke="#e5e7eb" />
+      <text x="168" y="23" fill="#111827" font-size="13" font-weight="500">All Months</text>
+      <path d="M257 16l4 4 4-4" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" />
+
+      <!-- + New Button -->
+      <g transform="translate(880, 0)">
+        <rect x="0" y="0" width="80" height="36" rx="8" fill="#2563eb" />
+        <text x="28" y="22" fill="#ffffff" font-size="16" font-weight="400">+</text>
+        <text x="42" y="22" fill="#ffffff" font-size="13" font-weight="600">New</text>
+        <path d="M68 16l3 3 3-3" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" />
+      </g>
+    </g>
+
+    <!-- METRIC CARDS ROW 1 -->
+    <g transform="translate(30, 76)">
+      <!-- Card 1: Buildings -->
+      <g transform="translate(0, 0)" filter="url(#shadow)">
+        <rect x="0" y="0" width="180" height="86" rx="12" fill="#ffffff" />
+        <rect x="16" y="16" width="36" height="36" rx="18" fill="#eff6ff" />
+        <path d="M28 28h12v12H28z" fill="none" stroke="#2563eb" stroke-width="1.5" />
+        <text x="64" y="30" fill="#6b7280" font-size="11" font-weight="500">Buildings</text>
+        <text x="64" y="52" fill="#111827" font-size="20" font-weight="700">5</text>
+      </g>
+
+      <!-- Card 2: Flats -->
+      <g transform="translate(192, 0)" filter="url(#shadow)">
+        <rect x="0" y="0" width="180" height="86" rx="12" fill="#ffffff" />
+        <rect x="16" y="16" width="36" height="36" rx="18" fill="#ecfdf5" />
+        <path d="M28 28h12v12H28z" fill="none" stroke="#10b981" stroke-width="1.5" />
+        <text x="64" y="30" fill="#6b7280" font-size="11" font-weight="500">Flats</text>
+        <text x="64" y="52" fill="#111827" font-size="20" font-weight="700">12</text>
+      </g>
+
+      <!-- Card 3: Residents -->
+      <g transform="translate(384, 0)" filter="url(#shadow)">
+        <rect x="0" y="0" width="180" height="86" rx="12" fill="#ffffff" />
+        <rect x="16" y="16" width="36" height="36" rx="18" fill="#f3e8ff" />
+        <circle cx="34" cy="30" r="4" fill="none" stroke="#9333ea" stroke-width="1.5" />
+        <text x="64" y="30" fill="#6b7280" font-size="11" font-weight="500">Residents</text>
+        <text x="64" y="52" fill="#111827" font-size="20" font-weight="700">18</text>
+      </g>
+
+      <!-- Card 4: Unpaid Invoices -->
+      <g transform="translate(576, 0)" filter="url(#shadow)">
+        <rect x="0" y="0" width="180" height="86" rx="12" fill="#ffffff" />
+        <rect x="16" y="16" width="36" height="36" rx="18" fill="#fff7ed" />
+        <path d="M28 26h12v14H28z" fill="none" stroke="#f97316" stroke-width="1.5" />
+        <text x="64" y="30" fill="#6b7280" font-size="11" font-weight="500">Unpaid Invoices</text>
+        <text x="64" y="52" fill="#111827" font-size="20" font-weight="700">7</text>
+        <text x="80" y="52" fill="#6b7280" font-size="11" font-weight="400"> $6,850.00</text>
+      </g>
+
+      <!-- Card 5: Collected (All Time) -->
+      <g transform="translate(768, 0)" filter="url(#shadow)">
+        <rect x="0" y="0" width="192" height="86" rx="12" fill="#ffffff" />
+        <rect x="16" y="16" width="36" height="36" rx="18" fill="#e0f2fe" />
+        <path d="M26 30h16v10H26z" fill="none" stroke="#0284c7" stroke-width="1.5" />
+        <text x="64" y="30" fill="#6b7280" font-size="11" font-weight="500">Collected (All Time)</text>
+        <text x="64" y="54" fill="#111827" font-size="18" font-weight="700">$45,680.00</text>
+      </g>
+    </g>
+
+    <!-- METRIC CARDS ROW 2 -->
+    <g transform="translate(30, 174)">
+      <!-- Expenses -->
+      <g transform="translate(0, 0)" filter="url(#shadow)">
+        <rect x="0" y="0" width="468" height="76" rx="12" fill="#ffffff" />
+        <rect x="16" y="20" width="36" height="36" rx="18" fill="#eff6ff" />
+        <path d="M28 32h12" stroke="#2563eb" stroke-width="2" />
+        <text x="64" y="34" fill="#6b7280" font-size="11" font-weight="500">Expenses (This Month)</text>
+        <text x="64" y="56" fill="#111827" font-size="18" font-weight="700">$1,250.00</text>
+      </g>
+
+      <!-- Deposits Held -->
+      <g transform="translate(492, 0)" filter="url(#shadow)">
+        <rect x="0" y="0" width="468" height="76" rx="12" fill="#ffffff" />
+        <rect x="16" y="20" width="36" height="36" rx="18" fill="#f0fdf4" />
+        <path d="M32 26l8 4-8 12-8-12z" fill="none" stroke="#16a34a" stroke-width="1.5" />
+        <text x="64" y="34" fill="#6b7280" font-size="11" font-weight="500">Deposits Held</text>
+        <text x="64" y="56" fill="#111827" font-size="18" font-weight="700">$8,900.00</text>
+      </g>
+    </g>
+
+    <!-- ALERTS BANNER -->
+    <g transform="translate(30, 262)" filter="url(#shadow)">
+      <rect x="0" y="0" width="960" height="96" rx="12" fill="#ffffff" />
+      
+      <!-- Alert Header -->
+      <path d="M20 22l6 12H14l6-12z" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linejoin="round" />
+      <text x="34" y="26" fill="#d97706" font-size="13" font-weight="700">Alerts</text>
+      
+      <!-- Badge -->
+      <rect x="850" y="14" width="94" height="20" rx="10" fill="#fef2f2" />
+      <text x="897" y="28" fill="#ef4444" font-size="10" font-weight="600" text-anchor="middle">7 need attention</text>
+
+      <!-- Alert Items -->
+      <circle cx="20" cy="52" r="3" fill="#ef4444" />
+      <text x="30" y="55" fill="#374151" font-size="12" font-weight="600">5 overdue invoices</text>
+      
+      <circle cx="20" cy="74" r="3" fill="#ef4444" />
+      <text x="30" y="77" fill="#374151" font-size="12" font-weight="600">2 lease agreements expiring soon</text>
+
+      <text x="918" y="66" fill="#6b7280" font-size="12" font-weight="500">$4,850.00</text>
+      <path d="M934 62l4 4-4 4" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" />
+    </g>
+
+    <!-- LOWER SECTION: RECENT INVOICES & QUICK ACTIONS / CALENDAR -->
+    
+    <!-- LEFT COLUMN: Recent Invoices & Monthly Overview -->
+    <g transform="translate(30, 374)">
+      
+      <!-- Recent Invoices Card -->
+      <g filter="url(#shadow)">
+        <rect x="0" y="0" width="620" height="290" rx="12" fill="#ffffff" />
+        
+        <!-- Card Header -->
+        <text x="20" y="32" fill="#111827" font-size="15" font-weight="700">Recent Invoices</text>
+        <text x="590" y="32" fill="#2563eb" font-size="12" font-weight="600" text-anchor="end">View All</text>
+
+        <!-- Table Header -->
+        <text x="20" y="65" fill="#9ca3af" font-size="10" font-weight="600">INVOICE #</text>
+        <text x="120" y="65" fill="#9ca3af" font-size="10" font-weight="600">RESIDENT / FLAT</text>
+        <text x="260" y="65" fill="#9ca3af" font-size="10" font-weight="600">MONTH</text>
+        <text x="350" y="65" fill="#9ca3af" font-size="10" font-weight="600">AMOUNT</text>
+        <text x="440" y="65" fill="#9ca3af" font-size="10" font-weight="600">STATUS</text>
+        <text x="530" y="65" fill="#9ca3af" font-size="10" font-weight="600">ACTION</text>
+
+        <!-- Row 1 -->
+        <g transform="translate(0, 80)">
+          <text x="20" y="18" fill="#374151" font-size="11" font-weight="600">INV-2026-1012</text>
+          <text x="120" y="18" fill="#374151" font-size="11">John Doe (A-101)</text>
+          <text x="260" y="18" fill="#6b7280" font-size="11">June 2026</text>
+          <text x="350" y="18" fill="#111827" font-size="11" font-weight="600">$1,250.00</text>
+          <rect x="435" y="4" width="50" height="18" rx="9" fill="#fef2f2" />
+          <text x="460" y="17" fill="#ef4444" font-size="10" font-weight="600" text-anchor="middle">Unpaid</text>
+          <!-- Eye Icon -->
+          <circle cx="540" cy="14" r="3" fill="none" stroke="#9ca3af" stroke-width="1.2" />
+        </g>
+
+        <!-- Row 2 -->
+        <g transform="translate(0, 118)">
+          <text x="20" y="18" fill="#374151" font-size="11" font-weight="600">INV-2026-1011</text>
+          <text x="120" y="18" fill="#374151" font-size="11">Sarah Johnson (A-102)</text>
+          <text x="260" y="18" fill="#6b7280" font-size="11">June 2026</text>
+          <text x="350" y="18" fill="#111827" font-size="11" font-weight="600">$1,100.00</text>
+          <rect x="435" y="4" width="50" height="18" rx="9" fill="#ecfdf5" />
+          <text x="460" y="17" fill="#10b981" font-size="10" font-weight="600" text-anchor="middle">Paid</text>
+          <circle cx="540" cy="14" r="3" fill="none" stroke="#9ca3af" stroke-width="1.2" />
+        </g>
+
+        <!-- Row 3 -->
+        <g transform="translate(0, 156)">
+          <text x="20" y="18" fill="#374151" font-size="11" font-weight="600">INV-2026-1010</text>
+          <text x="120" y="18" fill="#374151" font-size="11">Michael Brown (A-103)</text>
+          <text x="260" y="18" fill="#6b7280" font-size="11">June 2026</text>
+          <text x="350" y="18" fill="#111827" font-size="11" font-weight="600">$1,200.00</text>
+          <rect x="435" y="4" width="50" height="18" rx="9" fill="#fef2f2" />
+          <text x="460" y="17" fill="#ef4444" font-size="10" font-weight="600" text-anchor="middle">Unpaid</text>
+          <circle cx="540" cy="14" r="3" fill="none" stroke="#9ca3af" stroke-width="1.2" />
+        </g>
+
+        <!-- Row 4 -->
+        <g transform="translate(0, 194)">
+          <text x="20" y="18" fill="#374151" font-size="11" font-weight="600">INV-2026-1009</text>
+          <text x="120" y="18" fill="#374151" font-size="11">Emily Davis (B-201)</text>
+          <text x="260" y="18" fill="#6b7280" font-size="11">June 2026</text>
+          <text x="350" y="18" fill="#111827" font-size="11" font-weight="600">$1,500.00</text>
+          <rect x="435" y="4" width="50" height="18" rx="9" fill="#ecfdf5" />
+          <text x="460" y="17" fill="#10b981" font-size="10" font-weight="600" text-anchor="middle">Paid</text>
+          <circle cx="540" cy="14" r="3" fill="none" stroke="#9ca3af" stroke-width="1.2" />
+        </g>
+
+        <!-- Row 5 -->
+        <g transform="translate(0, 232)">
+          <text x="20" y="18" fill="#374151" font-size="11" font-weight="600">INV-2026-1008</text>
+          <text x="120" y="18" fill="#374151" font-size="11">David Wilson (B-202)</text>
+          <text x="260" y="18" fill="#6b7280" font-size="11">June 2026</text>
+          <text x="350" y="18" fill="#111827" font-size="11" font-weight="600">$1,050.00</text>
+          <rect x="435" y="4" width="50" height="18" rx="9" fill="#fef2f2" />
+          <text x="460" y="17" fill="#ef4444" font-size="10" font-weight="600" text-anchor="middle">Unpaid</text>
+          <circle cx="540" cy="14" r="3" fill="none" stroke="#9ca3af" stroke-width="1.2" />
+        </g>
+      </g>
+
+      <!-- Monthly Overview Table -->
+      <g transform="translate(0, 306)" filter="url(#shadow)">
+        <rect x="0" y="0" width="620" height="210" rx="12" fill="#ffffff" />
+        
+        <text x="20" y="32" fill="#111827" font-size="15" font-weight="700">Monthly Overview</text>
+
+        <!-- Table Header -->
+        <text x="20" y="65" fill="#9ca3af" font-size="10" font-weight="600">MONTH</text>
+        <text x="180" y="65" fill="#9ca3af" font-size="10" font-weight="600">INVOICES</text>
+        <text x="320" y="65" fill="#9ca3af" font-size="10" font-weight="600">COLLECTED</text>
+        <text x="480" y="65" fill="#9ca3af" font-size="10" font-weight="600">DUE</text>
+
+        <!-- Row 1 -->
+        <g transform="translate(0, 85)">
+          <text x="20" y="15" fill="#111827" font-size="12" font-weight="600">June 2026</text>
+          <text x="180" y="15" fill="#374151" font-size="12" font-weight="600">18</text>
+          <text x="320" y="15" fill="#059669" font-size="12" font-weight="600">$18,750.00</text>
+          <text x="480" y="15" fill="#dc2626" font-size="12" font-weight="600">$4,650.00</text>
+        </g>
+
+        <!-- Row 2 -->
+        <g transform="translate(0, 125)">
+          <text x="20" y="15" fill="#111827" font-size="12" font-weight="600">May 2026</text>
+          <text x="180" y="15" fill="#374151" font-size="12" font-weight="600">16</text>
+          <text x="320" y="15" fill="#059669" font-size="12" font-weight="600">$17,680.00</text>
+          <text x="480" y="15" fill="#dc2626" font-size="12" font-weight="600">$3,200.00</text>
+        </g>
+
+        <!-- Row 3 -->
+        <g transform="translate(0, 165)">
+          <text x="20" y="15" fill="#111827" font-size="12" font-weight="600">April 2026</text>
+          <text x="180" y="15" fill="#374151" font-size="12" font-weight="600">14</text>
+          <text x="320" y="15" fill="#059669" font-size="12" font-weight="600">$14,890.00</text>
+          <text x="480" y="15" fill="#dc2626" font-size="12" font-weight="600">$2,950.00</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- RIGHT COLUMN: Quick Actions, Calendar & Payment Summary -->
+    <g transform="translate(670, 374)">
+      
+      <!-- Quick Actions Widget -->
+      <g filter="url(#shadow)">
+        <rect x="0" y="0" width="320" height="170" rx="12" fill="#ffffff" />
+        <text x="20" y="30" fill="#111827" font-size="14" font-weight="700">Quick Actions</text>
+
+        <!-- Action 1: Generate Invoice -->
+        <g transform="translate(16, 46)">
+          <rect x="0" y="0" width="138" height="48" rx="8" fill="#ffffff" stroke="#f3f4f6" stroke-width="1.5" />
+          <path d="M14 18h12v12H14z" fill="none" stroke="#2563eb" stroke-width="1.5" />
+          <text x="36" y="28" fill="#1f2937" font-size="11" font-weight="600">Generate Invoice</text>
+        </g>
+
+        <!-- Action 2: Add Resident -->
+        <g transform="translate(162, 46)">
+          <rect x="0" y="0" width="138" height="48" rx="8" fill="#ffffff" stroke="#f3f4f6" stroke-width="1.5" />
+          <circle cx="22" cy="24" r="5" fill="none" stroke="#2563eb" stroke-width="1.5" />
+          <text x="36" y="28" fill="#1f2937" font-size="11" font-weight="600">Add Resident</text>
+        </g>
+
+        <!-- Action 3: Add Flat -->
+        <g transform="translate(16, 104)">
+          <rect x="0" y="0" width="138" height="48" rx="8" fill="#ffffff" stroke="#f3f4f6" stroke-width="1.5" />
+          <path d="M16 18h10v12H16z" fill="none" stroke="#2563eb" stroke-width="1.5" />
+          <text x="36" y="28" fill="#1f2937" font-size="11" font-weight="600">Add Flat</text>
+        </g>
+
+        <!-- Action 4: Add Building -->
+        <g transform="translate(162, 104)">
+          <rect x="0" y="0" width="138" height="48" rx="8" fill="#ffffff" stroke="#f3f4f6" stroke-width="1.5" />
+          <path d="M16 16h10v14H16z" fill="none" stroke="#2563eb" stroke-width="1.5" />
+          <text x="36" y="28" fill="#1f2937" font-size="11" font-weight="600">Add Building</text>
+        </g>
+      </g>
+
+      <!-- Calendar Widget -->
+      <g transform="translate(0, 186)" filter="url(#shadow)">
+        <rect x="0" y="0" width="320" height="200" rx="12" fill="#ffffff" />
+        
+        <!-- Calendar Header -->
+        <text x="160" y="28" fill="#111827" font-size="13" font-weight="700" text-anchor="middle">June 2026</text>
+
+        <!-- Days of Week -->
+        <g transform="translate(20, 50)" fill="#9ca3af" font-size="10" font-weight="600" text-anchor="middle">
+          <text x="10">Su</text>
+          <text x="50">Mo</text>
+          <text x="90">Tu</text>
+          <text x="130">We</text>
+          <text x="170">Th</text>
+          <text x="210">Fr</text>
+          <text x="250">Sa</text>
+        </g>
+
+        <!-- Dates Grid -->
+        <g transform="translate(20, 75)" fill="#374151" font-size="11" font-weight="500" text-anchor="middle">
+          <!-- Row 1 -->
+          <text x="10" y="0">1</text>
+          <text x="50" y="0">2</text>
+          <text x="90" y="0">3</text>
+          <text x="130" y="0">4</text>
+          <text x="170" y="0">5</text>
+          <text x="210" y="0">6</text>
+          <text x="250" y="0">7</text>
+
+          <!-- Row 2 -->
+          <text x="10" y="25">8</text>
+          <text x="50" y="25">9</text>
+          <text x="90" y="25">10</text>
+          <text x="130" y="25">11</text>
+          
+          <!-- Highlighted Active Date (12) -->
+          <circle cx="210" cy="21" r="12" fill="#2563eb" />
+          <text x="210" y="25" fill="#ffffff" font-weight="700">12</text>
+          
+          <text x="250" y="25">13</text>
+
+          <!-- Row 3 -->
+          <text x="10" y="50">14</text>
+          <text x="50" y="50">15</text>
+          <text x="90" y="50">16</text>
+          <text x="130" y="50">17</text>
+          <text x="170" y="50">18</text>
+          <text x="210" y="50">19</text>
+          <text x="250" y="50">20</text>
+
+          <!-- Row 4 -->
+          <text x="10" y="75">21</text>
+          <text x="50" y="75">22</text>
+          <text x="90" y="75">23</text>
+          <text x="130" y="75">24</text>
+          <text x="170" y="75">25</text>
+          <text x="210" y="75">26</text>
+          <text x="250" y="75">27</text>
+        </g>
+      </g>
+
+      <!-- Payment Summary (Donut Chart) Card -->
+      <g transform="translate(0, 402)" filter="url(#shadow)">
+        <rect x="0" y="0" width="320" height="180" rx="12" fill="#ffffff" />
+        <text x="20" y="28" fill="#111827" font-size="14" font-weight="700">Payment Summary</text>
+
+        <!-- Donut Chart Graphics -->
+        <g transform="translate(75, 105)">
+          <!-- Segment 1: Paid (Green) ~ 78% -->
+          <circle cx="0" cy="0" r="45" fill="none" stroke="#10b981" stroke-width="14" stroke-dasharray="210 283" stroke-dashoffset="0" transform="rotate(-90)" />
+          
+          <!-- Segment 2: Unpaid (Red) ~ 18% -->
+          <circle cx="0" cy="0" r="45" fill="none" stroke="#ef4444" stroke-width="14" stroke-dasharray="50 283" stroke-dashoffset="-210" transform="rotate(-90)" />
+          
+          <!-- Segment 3: Partial (Yellow/Orange) ~ 4% -->
+          <circle cx="0" cy="0" r="45" fill="none" stroke="#f59e0b" stroke-width="14" stroke-dasharray="15 283" stroke-dashoffset="-260" transform="rotate(-90)" />
+
+          <!-- Center Text -->
+          <text x="0" y="-2" fill="#111827" font-size="11" font-weight="700" text-anchor="middle">$45,680.00</text>
+          <text x="0" y="10" fill="#9ca3af" font-size="8" font-weight="500" text-anchor="middle">Total</text>
+        </g>
+
+        <!-- Legend -->
+        <g transform="translate(170, 55)">
+          <!-- Paid -->
+          <circle cx="6" cy="12" r="4" fill="#10b981" />
+          <text x="18" y="15" fill="#6b7280" font-size="11">Paid</text>
+          <text x="130" y="15" fill="#111827" font-size="11" font-weight="700" text-anchor="end">$35,930.00</text>
+
+          <!-- Unpaid -->
+          <circle cx="6" cy="37" r="4" fill="#ef4444" />
+          <text x="18" y="40" fill="#6b7280" font-size="11">Unpaid</text>
+          <text x="130" y="40" fill="#111827" font-size="11" font-weight="700" text-anchor="end">$8,400.00</text>
+
+          <!-- Partial -->
+          <circle cx="6" cy="62" r="4" fill="#f59e0b" />
+          <text x="18" y="65" fill="#6b7280" font-size="11">Partial</text>
+          <text x="130" y="65" fill="#111827" font-size="11" font-weight="700" text-anchor="end">$1,350.00</text>
+        </g>
+      </g>
+
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0a84ff">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
+<link rel="manifest" href="./app/manifest.webmanifest">
+<meta name="description" content="Propentra, Property Management & Billing.">
+<title>Propentra | Property Management & Billing</title>
+<style>
+:root{--blue:#0a84ff;--blue2:#0879e8;--ink:#202633;--muted:#7d8797;--line:#e8ebef;--bg:#f7f8fa;--card:#fff;--dark:#111214}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--ink);font:14px Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+a{text-decoration:none;color:inherit}.wrap{width:min(1180px,calc(100% - 32px));margin:auto}
+nav{height:72px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center}.nav{display:flex;align-items:center;justify-content:space-between;gap:24px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.03em}.logo{width:34px;height:34px;border-radius:10px;background:var(--blue);color:#fff;display:grid;place-items:center;font-weight:800}
+.links{display:flex;gap:26px;color:#687385;font-size:13px}.links a:hover{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:9px;padding:11px 17px;font-weight:600;border:1px solid transparent;cursor:pointer;font:inherit}.primary{background:var(--blue);color:#fff;box-shadow:0 4px 12px rgba(10,132,255,.18)}.primary:hover{background:var(--blue2)}.secondary{background:#fff;border-color:#dfe4ea}
+.btn[hidden]{display:none}
+.hero{padding:76px 0 44px}.hero-grid{display:grid;grid-template-columns:1fr 1.25fr;align-items:center;gap:54px}.eyebrow{color:var(--blue);font-size:12px;font-weight:700;letter-spacing:.08em}.hero h1{font-size:clamp(42px,5.6vw,68px);line-height:1.02;letter-spacing:-.055em;margin:14px 0 18px}.hero p{font-size:17px;line-height:1.7;color:#687385;max-width:560px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}.fine{font-size:12px;color:#9aa3b0;margin-top:12px}
+.screen{background:#f7f8fa;border:1px solid #dfe3e8;border-radius:14px;box-shadow:0 24px 70px rgba(32,38,51,.13);padding:10px}.screen img{display:block;width:100%;height:auto;border-radius:8px}
+section{padding:74px 0}.head{text-align:center;max-width:700px;margin:0 auto 38px}.head h2{font-size:38px;line-height:1.1;letter-spacing:-.04em;margin:0 0 10px}.head p{color:#748092;margin:0;line-height:1.7}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:0 2px 8px rgba(20,25,35,.025)}.ico{width:40px;height:40px;border-radius:11px;background:#eaf5ff;color:var(--blue);display:grid;place-items:center;font-weight:800;margin-bottom:17px}.card h3{font-size:16px;margin:0 0 7px}.card p{margin:0;color:#778294;line-height:1.65}
+.showcase{display:grid;grid-template-columns:1fr 1fr;gap:16px}.panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:28px}.panel h3{font-size:26px;letter-spacing:-.03em;margin:0 0 10px}.panel p{color:#748092;line-height:1.7}.list{margin:22px 0 0;padding:0;list-style:none}.list li{padding:11px 0;border-top:1px solid #eef0f3}.tick{color:#10b981;font-weight:800;margin-right:8px}
+.invoice{border:1px solid #e7e9ed;border-radius:12px;padding:22px}.invoice-head{display:flex;justify-content:space-between;border-bottom:1px solid #eef0f3;padding-bottom:15px}.invoice strong{font-size:20px}.line{display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid #f1f2f4;color:#687385}.total{display:flex;justify-content:space-between;padding-top:16px;font-weight:800}
+.dark{background:#111214;color:#fff;border-radius:16px;padding:42px}.dark h2{font-size:36px;letter-spacing:-.04em;margin:0 0 10px}.dark p{color:#a7adb8;max-width:680px;line-height:1.7}.pills{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}.pill{border:1px solid #2d3036;border-radius:999px;padding:8px 11px;color:#cdd2da;font-size:12px}
+.cta{background:#eaf5ff;border:1px solid #d7ebff;border-radius:16px;padding:48px 24px;text-align:center}.cta h2{font-size:40px;letter-spacing:-.04em;margin:0 0 10px}.cta p{color:#687385;margin:0 0 22px}
+footer{padding:30px 0;color:#8b94a1;font-size:12px}.foot{display:flex;justify-content:space-between;gap:20px}
+@media(max-width:900px){.hero-grid,.showcase{grid-template-columns:1fr}.links{display:none}.hero{padding-top:54px}.grid{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.wrap{width:min(100% - 22px,1180px)}.grid{grid-template-columns:1fr}.hero h1{font-size:44px}.head h2,.cta h2{font-size:30px}.dark{padding:28px}.panel{padding:22px}}
+
+.platforms{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.platforms span{font-size:11px;color:#667085;background:#fff;border:1px solid #e5e9ee;border-radius:999px;padding:6px 9px}
+.hero-dashboard{overflow:hidden}
+.hero-dashboard img{display:block;width:100%;height:auto}
+.trust-strip{padding:12px 0 34px}
+.trust-grid{display:grid;grid-template-columns:repeat(4,1fr);background:#fff;border:1px solid #e8ebef;border-radius:14px;overflow:hidden}
+.trust-grid div{padding:18px 20px;border-right:1px solid #eef0f3}
+.trust-grid div:last-child{border-right:0}
+.trust-grid strong{display:block;color:#202633;font-size:16px;letter-spacing:-.02em}
+.trust-grid span{display:block;color:#8993a1;font-size:11px;margin-top:4px}
+@media(max-width:900px){.trust-grid{grid-template-columns:1fr 1fr}.trust-grid div:nth-child(2){border-right:0}.trust-grid div:nth-child(-n+2){border-bottom:1px solid #eef0f3}}
+@media(max-width:560px){.trust-grid{grid-template-columns:1fr}.trust-grid div{border-right:0;border-bottom:1px solid #eef0f3}.trust-grid div:last-child{border-bottom:0}}
+
+.modal-backdrop{position:fixed;inset:0;background:rgba(17,18,20,.5);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}
+.modal-backdrop.open{display:flex}
+.modal{background:#fff;border-radius:16px;max-width:340px;width:100%;padding:26px;text-align:center}
+.modal h3{margin:0 0 12px;font-size:17px}
+.modal ol{text-align:left;font-size:14px;color:var(--ink);margin:0 0 20px;padding-left:20px;line-height:1.6}
+.modal .btn{width:100%}
+</style>
+</head>
+<body>
+<nav><div class="wrap nav">
+<a class="brand" href="#"><span class="logo">P</span><span>Propentra</span></a>
+<div class="links"><a href="#features">Features</a><a href="#billing">Billing</a><a href="#privacy">Privacy</a><a href="#faq">FAQ</a></div>
+<a class="btn primary" href="./app/">Open Propentra</a>
+</div></nav>
+<main>
+<section class="hero"><div class="wrap hero-grid">
+<div>
+<div class="eyebrow">PROPERTY MANAGEMENT &amp; BILLING</div>
+<h1>Property management, without the busywork.</h1>
+<p>Manage buildings, flats, residents, billing, payments, deposits, maintenance and expenses from one focused workspace.</p>
+<div class="actions"><button id="installBtn" class="btn primary" hidden>Install Propentra</button><a class="btn primary" href="./app/" id="openAppBtn">Open Propentra</a><a class="btn secondary" href="#features">See features</a></div>
+<div class="fine" id="platformNote">Installable PWA • iOS & Android • Offline-first • No account required</div>
+</div>
+<div class="screen hero-dashboard"><img src="dashboard-preview.svg" alt="Propentra dashboard preview with buildings, flats, residents, billing and payments"></div>
+</div></section>
+
+<section id="features"><div class="wrap">
+<div class="head"><h2>Built around your daily workflow.</h2><p>The landing page now follows the same visual language as the app, clean cards, soft gray surfaces, blue actions and compact information hierarchy.</p></div>
+<div class="grid">
+<div class="card"><div class="ico">▦</div><h3>Buildings &amp; Flats</h3><p>Organize properties and units with residents and transactions linked to the right place.</p></div>
+<div class="card"><div class="ico">♙</div><h3>Residents</h3><p>Keep tenant records, flat groups and important resident information together.</p></div>
+<div class="card"><div class="ico">৳</div><h3>Billing &amp; Payments</h3><p>Create bills, record payments and see paid, unpaid and outstanding amounts clearly.</p></div>
+<div class="card"><div class="ico">▣</div><h3>Deposits &amp; Advances</h3><p>Track security deposits and advance payments with their financial history.</p></div>
+<div class="card"><div class="ico">⌁</div><h3>Maintenance &amp; Expenses</h3><p>Track requests, vendors, costs and recurring property expenses.</p></div>
+<div class="card"><div class="ico">◷</div><h3>Reminders &amp; Documents</h3><p>Keep important dates, documents and expiry information visible.</p></div>
+<div class="card"><div class="ico">◫</div><h3>Reports</h3><p>See income, expenses and outstanding balances across every property at a glance.</p></div>
+<div class="card"><div class="ico">≡</div><h3>Audit Log</h3><p>Every payment, void, deletion and sensitive change is recorded in an append-only log.</p></div>
+<div class="card"><div class="ico">⟲</div><h3>Backup &amp; Restore</h3><p>Export a full backup any time and restore it on a new browser or device in seconds.</p></div>
+<div class="card"><div class="ico">◉</div><h3>Tenant Privacy</h3><p>ID numbers are masked on screen, and ID documents are stored securely, never as plain files.</p></div>
+<div class="card"><div class="ico">✓</div><h3>Document Verification</h3><p>Uploaded files are checked at the byte level, catching disguised or mislabeled documents.</p></div>
+<div class="card"><div class="ico">⬇</div><h3>Installable PWA</h3><p>Add Propentra to your home screen or desktop and use it like a native app, fully offline.</p></div>
+</div></div></section>
+
+
+<section class="trust-strip">
+  <div class="wrap trust-grid">
+    <div><strong>100%</strong><span>Offline-ready workflow</span></div>
+    <div><strong>iOS + Android</strong><span>Install as a PWA</span></div>
+    <div><strong>USD-ready</strong><span>Professional billing</span></div>
+    <div><strong>No account</strong><span>Start without signup</span></div>
+  </div>
+</section>
+<section id="billing"><div class="wrap"><div class="showcase">
+<div class="panel"><h3>Professional billing that looks as good as the dashboard.</h3><p>Keep invoices and receipts clear, consistent and easy to print or save as PDF.</p>
+<ul class="list"><li><span class="tick">✓</span>Invoice and receipt history</li><li><span class="tick">✓</span>Payment and deposit tracking</li><li><span class="tick">✓</span>Print-ready invoice workflow</li><li><span class="tick">✓</span>Excel, CSV and JSON workflows</li></ul></div>
+<div class="panel"><div class="invoice"><div class="invoice-head"><div><strong>INVOICE</strong><div style="font-size:11px;color:#9aa3b0">INV-2026-042</div></div><div style="text-align:right;font-size:11px;color:#9aa3b0">Propentra<br>Property Management &amp; Billing</div></div><div class="line"><span>Monthly service charge</span><b>$80.00</b></div><div class="line"><span>Water</span><b>$12.50</b></div><div class="line"><span>Maintenance</span><b>$7.50</b></div><div class="total"><span>Total</span><span>$100.00</span></div></div></div>
+</div></div></section>
+
+<section id="privacy"><div class="wrap"><div class="dark"><h2>Offline-first, like the app.</h2><p>The current Propentra PWA stores core business data locally with IndexedDB, so it can continue working without a backend after the app is available on the device.</p><div class="pills"><span class="pill">IndexedDB</span><span class="pill">PWA</span><span class="pill">Offline mode</span><span class="pill">Backup &amp; restore</span><span class="pill">No external APIs</span></div></div></div></section>
+
+<section id="faq"><div class="wrap"><div class="head"><h2>Simple to start.</h2><p>Propentra keeps the first version focused and easy to deploy.</p></div><div class="grid">
+<div class="card"><h3>Where is my data stored?</h3><p>The current app stores business data locally in your browser using IndexedDB.</p></div>
+<div class="card"><h3>Can I work offline?</h3><p>Yes. Propentra is an installable PWA designed for offline-first use.</p></div>
+<div class="card"><h3>Can I move my data?</h3><p>Use the built-in backup and import workflows to move supported records.</p></div>
+</div></div></section>
+
+<section><div class="wrap"><div class="cta"><h2>Ready to manage properties better?</h2><p>Open Propentra and keep your property workflow in one place.</p><a class="btn primary" href="./app/">Open Propentra</a></div></div></section>
+</main>
+<footer><div class="wrap foot"><span>© 2026 Propentra</span><span>Property Management &amp; Billing</span></div></footer>
+
+<div class="modal-backdrop" id="iosModal">
+  <div class="modal">
+    <h3>Install Propentra on iPhone/iPad</h3>
+    <ol>
+      <li>Tap the <b>Share</b> icon in Safari's toolbar.</li>
+      <li>Scroll down and tap <b>Add to Home Screen</b>.</li>
+      <li>Tap <b>Add</b> in the top right.</li>
+    </ol>
+    <button class="btn primary" id="iosModalClose">Got it</button>
+  </div>
+</div>
+
+<script>
+  var deferredPrompt = null;
+  var installBtn = document.getElementById('installBtn');
+  var note = document.getElementById('platformNote');
+  var iosModal = document.getElementById('iosModal');
+  var iosModalClose = document.getElementById('iosModalClose');
+
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  var ua = navigator.userAgent || '';
+  var isIOS = /iphone|ipad|ipod/i.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1);
+  var isAndroid = /android/i.test(ua);
+
+  function showInstallButton(label) {
+    installBtn.textContent = label;
+    installBtn.hidden = false;
+  }
+
+  if (isStandalone) {
+    note.textContent = 'You already have Propentra installed.';
+  } else if (isIOS) {
+    showInstallButton('Add to Home Screen');
+    note.textContent = 'Tap above, then follow the Safari steps to install.';
+  } else if (isAndroid) {
+    showInstallButton('Install app');
+  }
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferredPrompt = e;
+    if (!isStandalone) showInstallButton('Install app');
+  });
+
+  installBtn.addEventListener('click', function () {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.finally(function () {
+        deferredPrompt = null;
+        installBtn.hidden = true;
+      });
+    } else if (isIOS) {
+      iosModal.classList.add('open');
+    } else {
+      window.location.href = './app/';
+    }
+  });
+
+  iosModalClose.addEventListener('click', function () {
+    iosModal.classList.remove('open');
+  });
+  iosModal.addEventListener('click', function (e) {
+    if (e.target === iosModal) iosModal.classList.remove('open');
+  });
+
+  window.addEventListener('appinstalled', function () {
+    installBtn.hidden = true;
+    note.textContent = 'Installed. Open Propentra from your home screen or app list.';
+  });
+</script>
+</body></html>
