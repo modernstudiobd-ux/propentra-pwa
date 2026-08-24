@@ -1,7 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Building, Flat, Resident, Bill, Receipt, Payment, CompanySettings,
-  DepositTransaction, MaintenanceRequest, Expense, Reminder, DocumentRecord, AuditLogEntry,
+  DepositTransaction, MaintenanceRequest, Expense, Reminder, DocumentRecord, AuditLogEntry, ImportTemplate,
 } from '@/types';
 import { base64ToBlob } from '@/lib/fileValidation';
 
@@ -19,6 +19,7 @@ export class PropentraDB extends Dexie {
   reminders!: Table<Reminder, number>;
   documents!: Table<DocumentRecord, number>;
   auditLog!: Table<AuditLogEntry, number>;
+  importTemplates!: Table<ImportTemplate, number>;
 
   constructor() {
     // The physical IndexedDB name is intentionally left as-is even after the
@@ -128,6 +129,26 @@ export class PropentraDB extends Dexie {
           }
         });
       });
+
+    // v5: adds saved column-mapping templates for the Import Wizard. Purely
+    // additive - every existing table/index is repeated unchanged, so this
+    // upgrade never touches existing data.
+    this.version(5).stores({
+      buildings: '++id, name',
+      flats: '++id, buildingId, unitNo, status',
+      residents: '++id, name, buildingId, flatId, type, status',
+      bills: '++id, invoiceNo, buildingId, flatId, residentId, status, billingMonth',
+      receipts: '++id, receiptNo, invoiceId, residentId, voided',
+      payments: '++id, invoiceId, residentId, date, voided',
+      settings: '++id',
+      depositTransactions: '++id, residentId, buildingId, flatId, type, date',
+      maintenanceRequests: '++id, buildingId, flatId, status, priority, reportedDate',
+      expenses: '++id, buildingId, flatId, category, date',
+      reminders: '++id, dueDate, status, priority, linkType, linkId',
+      documents: '++id, linkType, linkId, buildingId, category, expiryDate',
+      auditLog: '++id, entityType, entityId, action, timestamp, residentId',
+      importTemplates: '++id, entity',
+    });
   }
 }
 

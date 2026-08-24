@@ -228,13 +228,14 @@ export type AuditAction =
   | 'bill_voided' | 'bill_deleted'
   | 'resident_created' | 'resident_updated' | 'resident_deleted' | 'resident_archived' | 'resident_unarchived'
   | 'document_uploaded' | 'document_deleted'
-  | 'backup_created' | 'restore_performed';
+  | 'backup_created' | 'restore_performed'
+  | 'data_imported';
 
 export interface AuditLogEntry {
   id?: number;
   timestamp: string; // ISO datetime
   action: AuditAction;
-  entityType: 'payment' | 'receipt' | 'bill' | 'deposit' | 'resident' | 'document' | 'backup';
+  entityType: 'payment' | 'receipt' | 'bill' | 'deposit' | 'resident' | 'document' | 'backup' | 'building' | 'flat' | 'expense';
   entityId?: number; // id of the affected record, when applicable
   buildingId?: number;
   flatId?: number;
@@ -243,6 +244,16 @@ export interface AuditLogEntry {
   details?: string; // optional extra context (reason, field changes, counts...)
   amount?: number; // financial amount involved, when applicable
   performedBy: string; // no auth system yet, so this is always 'Local User' - kept as a field so it's ready if multi-user login is added later
+}
+
+// --- Import Wizard: saved column-mapping templates -------------------------
+
+export interface ImportTemplate {
+  id?: number;
+  name: string;
+  entity: 'buildings' | 'flats' | 'residents' | 'expenses';
+  mapping: Record<string, string>; // target field key -> source header LABEL (not index - see lib/import/templates.ts)
+  createdAt: string; // ISO datetime
 }
 
 export interface CompanySettings {

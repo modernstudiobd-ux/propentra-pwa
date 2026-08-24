@@ -3,6 +3,7 @@ import {
   LayoutDashboard, Building2, Home, Users, Receipt, FileText,
   History, CreditCard, BarChart3, Settings, DatabaseBackup,
   ChevronDown, X, HelpCircle, PiggyBank, Wrench, Wallet, BellRing, FolderOpen, History as HistoryIcon, ShieldCheck,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useState } from 'react';
 import StorageStatus from './StorageStatus';
@@ -29,6 +30,7 @@ const operationsNav = [
   { to: '/expenses', label: 'Expenses', icon: Wallet },
   { to: '/reminders', label: 'Reminders', icon: BellRing },
   { to: '/documents', label: 'Documents', icon: FolderOpen },
+  { to: '/import', label: 'Import Data', icon: FileSpreadsheet },
   { to: '/timeline', label: 'Timeline', icon: HistoryIcon },
   { to: '/audit-log', label: 'Audit Log', icon: ShieldCheck },
 ];

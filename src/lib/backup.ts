@@ -6,11 +6,12 @@ import { logAudit } from '@/lib/audit';
 // how restore should interpret it. Restore uses this to decide whether it
 // can safely import a file (older backups are fine; newer/unknown ones are
 // rejected rather than silently importing data restore doesn't understand).
-export const BACKUP_FORMAT_VERSION = 3;
+export const BACKUP_FORMAT_VERSION = 4;
 
 export const TABLES = [
   'buildings', 'flats', 'residents', 'bills', 'receipts', 'payments', 'settings',
   'depositTransactions', 'maintenanceRequests', 'expenses', 'reminders', 'documents', 'auditLog',
+  'importTemplates',
 ] as const;
 
 export type TableName = (typeof TABLES)[number];
@@ -32,6 +33,7 @@ const TABLE_INTRODUCED_IN: Record<TableName, number> = {
   depositTransactions: 1, maintenanceRequests: 1, expenses: 1, reminders: 1,
   documents: 2,
   auditLog: 3,
+  importTemplates: 4,
 };
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -156,6 +158,11 @@ const RECORD_CHECKS: Partial<Record<TableName, FieldCheck[]>> = {
     { field: 'entityType', check: isNonEmptyString, label: 'a non-empty string' },
     { field: 'summary', check: isNonEmptyString, label: 'a non-empty string' },
     { field: 'timestamp', check: isNonEmptyString, label: 'a non-empty string' },
+  ],
+  importTemplates: [
+    { field: 'name', check: isNonEmptyString, label: 'a non-empty string' },
+    { field: 'entity', check: isNonEmptyString, label: 'a non-empty string' },
+    { field: 'mapping', check: (v) => isPlainObject(v), label: 'an object' },
   ],
 };
 

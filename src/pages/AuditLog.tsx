@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money } from '@/lib/format';
-import { Search, ShieldCheck, Ban, PlusCircle, Pencil, Trash2, PiggyBank, DatabaseBackup, UploadCloud, Archive, FolderOpen } from 'lucide-react';
+import { Search, ShieldCheck, Ban, PlusCircle, Pencil, Trash2, PiggyBank, DatabaseBackup, UploadCloud, Archive, FolderOpen, FileSpreadsheet } from 'lucide-react';
 import type { AuditAction } from '@/types';
 
 const ACTION_META: Record<AuditAction, { label: string; icon: any; color: string }> = {
@@ -26,6 +26,7 @@ const ACTION_META: Record<AuditAction, { label: string; icon: any; color: string
   document_deleted: { label: 'Document Deleted', icon: Trash2, color: 'text-red-500' },
   backup_created: { label: 'Backup Created', icon: DatabaseBackup, color: 'text-brand-500' },
   restore_performed: { label: 'Data Restored', icon: UploadCloud, color: 'text-amber-600' },
+  data_imported: { label: 'Data Imported', icon: FileSpreadsheet, color: 'text-brand-500' },
 };
 
 export default function AuditLog() {

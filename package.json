@@ -1,7 +1,7 @@
 {
   "name": "propentra",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,17 +13,18 @@
   "dependencies": {
     "dexie": "^4.0.8",
     "dexie-react-hooks": "^1.1.7",
+    "lucide-react": "^0.446.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
     "recharts": "^2.12.7",
-    "lucide-react": "^0.446.0"
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@types/node": "^22.7.5",
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
-    "@types/node": "^22.7.5",
     "autoprefixer": "^10.4.20",
     "fake-indexeddb": "^6.0.0",
     "postcss": "^8.4.47",
