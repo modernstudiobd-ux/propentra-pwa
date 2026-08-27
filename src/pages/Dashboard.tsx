@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, moneyCompact, dateLabel } from '@/lib/format';
@@ -11,7 +11,8 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Link, useNavigate } from 'react-router-dom';
 import InvoiceViewModal from '@/components/InvoiceViewModal';
 import MiniCalendar from '@/components/MiniCalendar';
-import type { Bill } from '@/types';
+import { getExpiringTenancies } from '@/lib/tenancy';
+import type { Bill, Tenancy } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 function daysUntil(iso: string) {
@@ -50,6 +51,11 @@ export default function Dashboard() {
   const [monthFilter, setMonthFilter] = useState<'all' | string>('all');
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [viewBill, setViewBill] = useState<Bill | null>(null);
+  const [expiringLeases, setExpiringLeases] = useState<Tenancy[]>([]);
+
+  useEffect(() => {
+    getExpiringTenancies(60).then(setExpiringLeases);
+  }, []);
 
   const months = useMemo(() => Array.from(new Set(allBills.map((b) => b.billingMonth))), [allBills]);
 
@@ -111,6 +117,8 @@ export default function Dashboard() {
     inScope(r.buildingId) && (r.status ?? 'current') === 'current' && r.idExpiryDate && daysUntil(r.idExpiryDate) <= 30
   );
 
+  const expiringLeasesInScope = expiringLeases.filter((t) => inScope(t.buildingId));
+
   const thisMonthExpenses = expenses.filter((e) => inScope(e.buildingId) && e.date.startsWith(thisMonthKey)).reduce((s, e) => s + e.amount, 0);
 
   const depositsHeld = depositTxns.filter((t) => inScope(t.buildingId) && !t.voided).reduce((s, t) => {
@@ -120,7 +128,7 @@ export default function Dashboard() {
     return s;
   }, 0);
 
-  const alertCount = overdueBills.length + urgentMaintenance.length + dueReminders.length + expiringDocs.length + expiringIds.length;
+  const alertCount = overdueBills.length + urgentMaintenance.length + dueReminders.length + expiringDocs.length + expiringIds.length + expiringLeasesInScope.length;
 
   const newActions = [
     { label: 'Generate Bill', icon: FileText, to: '/billing/generator' },
@@ -216,6 +224,12 @@ export default function Dashboard() {
             {expiringIds.length > 0 && (
               <Link to="/residents" className="flex items-center justify-between py-2.5 group">
                 <span className="flex items-center gap-2 text-sm text-gray-700"><FileWarning size={15} className="text-amber-500" /> {expiringIds.length} resident ID{expiringIds.length !== 1 ? 's' : ''} expiring or expired</span>
+                <ChevronRight size={14} className="text-gray-400 group-hover:text-brand-500" />
+              </Link>
+            )}
+            {expiringLeasesInScope.length > 0 && (
+              <Link to="/residents" className="flex items-center justify-between py-2.5 group">
+                <span className="flex items-center gap-2 text-sm text-gray-700"><FileWarning size={15} className="text-amber-500" /> {expiringLeasesInScope.length} lease{expiringLeasesInScope.length !== 1 ? 's' : ''} ending within 60 days</span>
                 <ChevronRight size={14} className="text-gray-400 group-hover:text-brand-500" />
               </Link>
             )}

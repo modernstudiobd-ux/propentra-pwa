@@ -84,7 +84,7 @@ export default function SetupWizard({ onFinish }: { onFinish: () => void }) {
 
   async function saveFlatAndNext() {
     if (!unitNo.trim() || !createdBuildingId) { next(); return; }
-    const id = await db.flats.add({ buildingId: createdBuildingId, unitNo, status: 'vacant' });
+    const id = await db.flats.add({ buildingId: createdBuildingId, unitNo, occupancyStatus: 'vacant', lifecycleStatus: 'active' });
     setCreatedFlatId(id as number);
     next();
   }
@@ -97,7 +97,7 @@ export default function SetupWizard({ onFinish }: { onFinish: () => void }) {
         flatId: createdFlatId, buildingId: createdBuildingId, unitLabel: flat?.unitNo ?? unitNo, type: residentType,
         status: 'current', moveInDate: new Date().toISOString().slice(0, 10), isBillingContact: true,
       });
-      await db.flats.update(createdFlatId, { status: 'occupied' });
+      await db.flats.update(createdFlatId, { occupancyStatus: 'occupied' });
     }
     next();
   }

@@ -65,24 +65,26 @@ export default function Documents() {
 
   async function save() {
     if (!form.title?.trim() || !pendingFile) return;
+    const linkedFlat = form.linkType === 'flat' ? flats.find((f) => f.id === form.linkId) : undefined;
+    const linkedResident = form.linkType === 'resident' ? residents.find((r) => r.id === form.linkId) : undefined;
+    const resolvedBuildingId = form.linkType === 'building' ? form.linkId
+      : form.linkType === 'flat' ? linkedFlat?.buildingId
+      : form.linkType === 'resident' ? linkedResident?.buildingId
+      : undefined;
     const newId = await db.documents.add({
       title: form.title.trim(),
       category: form.category || 'Other',
       linkType: form.linkType ?? 'none',
       linkId: form.linkId,
-      buildingId: form.linkType === 'building' ? form.linkId
-        : form.linkType === 'flat' ? flats.find((f) => f.id === form.linkId)?.buildingId
-        : form.linkType === 'resident' ? residents.find((r) => r.id === form.linkId)?.buildingId
-        : undefined,
+      buildingId: resolvedBuildingId,
+      flatId: form.linkType === 'flat' ? form.linkId : linkedResident?.flatId,
+      residentId: form.linkType === 'resident' ? form.linkId : undefined,
       fileData: pendingFile.data, fileName: pendingFile.name, fileType: pendingFile.type, fileSize: pendingFile.size,
       uploadDate: todayISO(), expiryDate: form.expiryDate || undefined, notes: form.notes,
     });
     await logAudit({
       action: 'document_uploaded', entityType: 'document', entityId: newId as number,
-      buildingId: form.linkType === 'building' ? form.linkId
-        : form.linkType === 'flat' ? flats.find((f) => f.id === form.linkId)?.buildingId
-        : form.linkType === 'resident' ? residents.find((r) => r.id === form.linkId)?.buildingId
-        : undefined,
+      buildingId: resolvedBuildingId,
       summary: `Uploaded document "${form.title.trim()}" (${form.category})`,
     });
     setOpen(false);

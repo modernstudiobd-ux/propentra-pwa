@@ -4,26 +4,31 @@ import { db } from '@/lib/db';
 import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 import Modal from '@/components/Modal';
 import type { Building } from '@/types';
+import { PROPERTY_TYPES, BUILDING_STATUSES } from '@/types';
 
-const empty: Building = { name: '', address: '', totalFlats: 0 };
+function nowIso() { return new Date().toISOString(); }
+const empty = (): Building => ({
+  name: '', address: '', addressLine2: '', locality: '', adminArea: '', postalCode: '', countryCode: '',
+  propertyType: '', status: 'active', totalFlats: 0,
+});
 
 export default function Buildings() {
   const buildings = useLiveQuery(() => db.buildings.toArray(), []) ?? [];
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<Building>(empty);
+  const [form, setForm] = useState<Building>(empty());
 
   const filtered = buildings.filter((b) =>
     b.name.toLowerCase().includes(query.toLowerCase()) || b.address.toLowerCase().includes(query.toLowerCase())
   );
 
-  function openAdd() { setForm(empty); setOpen(true); }
-  function openEdit(b: Building) { setForm(b); setOpen(true); }
+  function openAdd() { setForm(empty()); setOpen(true); }
+  function openEdit(b: Building) { setForm({ ...empty(), ...b }); setOpen(true); }
 
   async function save() {
     if (!form.name.trim() || !form.address.trim()) return;
-    if (form.id) await db.buildings.update(form.id, form);
-    else await db.buildings.add(form);
+    if (form.id) await db.buildings.update(form.id, { ...form, updatedAt: nowIso() });
+    else await db.buildings.add({ ...form, createdAt: nowIso(), updatedAt: nowIso() });
     setOpen(false);
   }
 
@@ -54,6 +59,7 @@ export default function Buildings() {
                 <th className="table-th">#</th>
                 <th className="table-th">Building Name</th>
                 <th className="table-th">Address</th>
+                <th className="table-th">Type</th>
                 <th className="table-th">Total Flats</th>
                 <th className="table-th text-right">Action</th>
               </tr>
@@ -63,7 +69,8 @@ export default function Buildings() {
                 <tr key={b.id}>
                   <td className="table-td">{i + 1}</td>
                   <td className="table-td font-medium text-gray-800">{b.name}</td>
-                  <td className="table-td">{b.address}</td>
+                  <td className="table-td">{b.address}{b.locality ? `, ${b.locality}` : ''}</td>
+                  <td className="table-td text-gray-500">{b.propertyType || '—'}</td>
                   <td className="table-td">{b.totalFlats}</td>
                   <td className="table-td text-right">
                     <button onClick={() => openEdit(b)} className="icon-btn text-brand-500 mr-1"><Pencil size={16} /></button>
@@ -72,7 +79,7 @@ export default function Buildings() {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={5} className="text-center text-sm text-gray-400 py-8">No buildings found</td></tr>
+                <tr><td colSpan={6} className="text-center text-sm text-gray-400 py-8">No buildings found</td></tr>
               )}
             </tbody>
           </table>
@@ -85,7 +92,7 @@ export default function Buildings() {
               <div className="min-w-0">
                 <div className="font-medium text-gray-800">{b.name}</div>
                 <div className="text-sm text-gray-500 mt-0.5">{b.address}</div>
-                <div className="text-xs text-gray-400 mt-1">{b.totalFlats} flats</div>
+                <div className="text-xs text-gray-400 mt-1">{b.totalFlats} flats {b.propertyType ? `· ${b.propertyType}` : ''}</div>
               </div>
               <div className="flex items-center shrink-0 gap-1">
                 <button onClick={() => openEdit(b)} className="icon-btn text-brand-500"><Pencil size={18} /></button>
@@ -107,6 +114,31 @@ export default function Buildings() {
             <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
           <div><label className="label">Address</label>
             <input className="input" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+          <div><label className="label">Address Line 2 (optional)</label>
+            <input className="input" value={form.addressLine2 ?? ''} onChange={(e) => setForm({ ...form, addressLine2: e.target.value })} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">City / Locality</label>
+              <input className="input" value={form.locality ?? ''} onChange={(e) => setForm({ ...form, locality: e.target.value })} /></div>
+            <div><label className="label">State / Region</label>
+              <input className="input" value={form.adminArea ?? ''} onChange={(e) => setForm({ ...form, adminArea: e.target.value })} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Postal Code</label>
+              <input className="input" value={form.postalCode ?? ''} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} /></div>
+            <div><label className="label">Country Code</label>
+              <input className="input" placeholder="e.g. US, BD, GB" maxLength={2} value={form.countryCode ?? ''} onChange={(e) => setForm({ ...form, countryCode: e.target.value.toUpperCase() })} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">Property Type</label>
+              <select className="input" value={form.propertyType ?? ''} onChange={(e) => setForm({ ...form, propertyType: e.target.value })}>
+                <option value="">—</option>
+                {PROPERTY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select></div>
+            <div><label className="label">Status</label>
+              <select className="input" value={form.status ?? 'active'} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                {BUILDING_STATUSES.map((s) => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
+              </select></div>
+          </div>
           <div><label className="label">Total Flats</label>
             <input type="number" className="input" value={form.totalFlats}
               onChange={(e) => setForm({ ...form, totalFlats: Number(e.target.value) })} /></div>

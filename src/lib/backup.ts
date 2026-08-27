@@ -6,12 +6,12 @@ import { logAudit } from '@/lib/audit';
 // how restore should interpret it. Restore uses this to decide whether it
 // can safely import a file (older backups are fine; newer/unknown ones are
 // rejected rather than silently importing data restore doesn't understand).
-export const BACKUP_FORMAT_VERSION = 4;
+export const BACKUP_FORMAT_VERSION = 5;
 
 export const TABLES = [
   'buildings', 'flats', 'residents', 'bills', 'receipts', 'payments', 'settings',
   'depositTransactions', 'maintenanceRequests', 'expenses', 'reminders', 'documents', 'auditLog',
-  'importTemplates',
+  'importTemplates', 'tenancies', 'ownerships', 'contacts', 'emergencyContacts', 'vehicles', 'parkingSpaces',
 ] as const;
 
 export type TableName = (typeof TABLES)[number];
@@ -34,10 +34,40 @@ const TABLE_INTRODUCED_IN: Record<TableName, number> = {
   documents: 2,
   auditLog: 3,
   importTemplates: 4,
+  tenancies: 5, ownerships: 5, contacts: 5, emergencyContacts: 5, vehicles: 5, parkingSpaces: 5,
 };
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Upgrades records from older backup format versions to the CURRENT field
+ * shape before validation/restore ever sees them - mirrors the equivalent
+ * db.ts upgrade() logic, but for a backup FILE being restored rather than
+ * the live database. Without this, restoring a pre-v5 backup would insert
+ * flats with the old `status` field and no `occupancyStatus`, breaking
+ * every screen that now reads the new field. Mutates and returns the same
+ * object; safe to call on already-current-format data (it's a no-op then).
+ */
+export function normalizeLegacyBackupRecords(data: Record<string, any>): Record<string, any> {
+  if (Array.isArray(data.flats)) {
+    data.flats = data.flats.map((f: any) => {
+      if (f.occupancyStatus === undefined && f.status !== undefined) {
+        const { status, ...rest } = f;
+        return { ...rest, occupancyStatus: status === 'occupied' ? 'occupied' : 'vacant', lifecycleStatus: f.lifecycleStatus ?? 'active' };
+      }
+      return f;
+    });
+  }
+  if (Array.isArray(data.documents)) {
+    data.documents = data.documents.map((d: any) => {
+      if (d.linkType === 'resident' && d.linkId && d.residentId === undefined) return { ...d, residentId: d.linkId };
+      if (d.linkType === 'flat' && d.linkId && d.flatId === undefined) return { ...d, flatId: d.linkId };
+      return d;
+    });
+  }
+  return data;
 }
 
 /**
@@ -88,7 +118,7 @@ const RECORD_CHECKS: Partial<Record<TableName, FieldCheck[]>> = {
   flats: [
     { field: 'buildingId', check: isFiniteNumber, label: 'a number' },
     { field: 'unitNo', check: isNonEmptyString, label: 'a non-empty string' },
-    { field: 'status', check: oneOf('occupied', 'vacant'), label: '"occupied" or "vacant"' },
+    { field: 'occupancyStatus', check: oneOf('occupied', 'vacant'), label: '"occupied" or "vacant"' },
   ],
   residents: [
     { field: 'name', check: isNonEmptyString, label: 'a non-empty string' },
@@ -163,6 +193,36 @@ const RECORD_CHECKS: Partial<Record<TableName, FieldCheck[]>> = {
     { field: 'name', check: isNonEmptyString, label: 'a non-empty string' },
     { field: 'entity', check: isNonEmptyString, label: 'a non-empty string' },
     { field: 'mapping', check: (v) => isPlainObject(v), label: 'an object' },
+  ],
+  tenancies: [
+    { field: 'residentId', check: isFiniteNumber, label: 'a number' },
+    { field: 'flatId', check: isFiniteNumber, label: 'a number' },
+    { field: 'buildingId', check: isFiniteNumber, label: 'a number' },
+    { field: 'monthlyRent', check: isFiniteNumber, label: 'a number' },
+    { field: 'leaseStart', check: isNonEmptyString, label: 'a date string' },
+  ],
+  ownerships: [
+    { field: 'residentId', check: isFiniteNumber, label: 'a number' },
+    { field: 'flatId', check: isFiniteNumber, label: 'a number' },
+    { field: 'buildingId', check: isFiniteNumber, label: 'a number' },
+    { field: 'ownershipPct', check: isFiniteNumber, label: 'a number' },
+  ],
+  contacts: [
+    { field: 'residentId', check: isFiniteNumber, label: 'a number' },
+    { field: 'name', check: isNonEmptyString, label: 'a non-empty string' },
+  ],
+  emergencyContacts: [
+    { field: 'residentId', check: isFiniteNumber, label: 'a number' },
+    { field: 'name', check: isNonEmptyString, label: 'a non-empty string' },
+    { field: 'phone', check: isNonEmptyString, label: 'a non-empty string' },
+  ],
+  vehicles: [
+    { field: 'residentId', check: isFiniteNumber, label: 'a number' },
+    { field: 'plate', check: isNonEmptyString, label: 'a non-empty string' },
+  ],
+  parkingSpaces: [
+    { field: 'buildingId', check: isFiniteNumber, label: 'a number' },
+    { field: 'spaceNumber', check: isNonEmptyString, label: 'a non-empty string' },
   ],
 };
 

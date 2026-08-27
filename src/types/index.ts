@@ -1,26 +1,78 @@
+// --- Address (shared shape for Building + Resident mailing address) --------
+
+export interface StructuredAddress {
+  line1?: string;
+  line2?: string;
+  locality?: string; // city/town
+  adminArea?: string; // state/province/region
+  postalCode?: string;
+  countryCode?: string; // ISO 3166-1 alpha-2, e.g. 'US', 'BD', 'GB'
+}
+
+export const PROPERTY_TYPES = ['Apartment Building', 'Condominium', 'Townhouse Complex', 'Single-Family', 'Mixed-Use', 'Other'] as const;
+export const BUILDING_STATUSES = ['active', 'inactive', 'under_construction'] as const;
+
 export interface Building {
   id?: number;
   name: string;
-  address: string;
+  address: string; // free-text address kept as the single source shown throughout the app (invoices, lists, search)
+  addressLine2?: string;
+  locality?: string; // city/town - recommended for new buildings, optional for backward compatibility with existing records
+  adminArea?: string; // state/province/region
+  postalCode?: string;
+  countryCode?: string; // ISO 3166-1 alpha-2
+  propertyType?: string;
+  status?: string; // 'active' | 'inactive' | 'under_construction' - lifecycle status, defaults to 'active'
   totalFlats: number;
+  createdAt?: string; // ISO datetime
+  updatedAt?: string; // ISO datetime
 }
+
+export const UNIT_TYPES = ['Studio', '1 Bedroom', '2 Bedroom', '3 Bedroom', '4+ Bedroom', 'Commercial', 'Other'] as const;
+export type FlatOccupancyStatus = 'occupied' | 'vacant';
+export const FLAT_LIFECYCLE_STATUSES = ['active', 'under_renovation', 'inactive'] as const;
 
 export interface Flat {
   id?: number;
   buildingId: number;
   unitNo: string; // e.g. A-3
   floor?: string;
-  status: 'occupied' | 'vacant';
+  occupancyStatus: FlatOccupancyStatus; // whether someone currently lives there (was "status" prior to the Tenancy/Ownership migration)
+  lifecycleStatus?: string; // 'active' | 'under_renovation' | 'inactive' - whether the unit itself is in service, independent of occupancy
+  unitType?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  sqft?: number;
+  standardRent?: number; // list/asking rent - used to auto-fill a new Tenancy's monthly rent
+  currency?: string; // ISO 4217 code, e.g. 'USD' - falls back to company currency when unset
+  parkingIncluded?: boolean;
+  storageIncluded?: boolean;
 }
 
 export type ResidentType = 'Tenant' | 'Owner';
 export type ResidentStatus = 'current' | 'former';
+export const PREFERRED_CONTACT_METHODS = ['Mobile', 'Email', 'WhatsApp', 'Mail'] as const;
+export const CONSENT_STATUSES = ['granted', 'declined', 'not_asked'] as const;
 
 export interface Resident {
   id?: number;
-  name: string;
+  name: string; // full display name - source of truth for every existing screen (search, invoices, WhatsApp, receipts). Kept in sync with firstName/lastName by the Residents form when those are used.
+  // Structured name - optional so existing records (and every screen that
+  // only ever dealt with a single `name` field) keep working unchanged;
+  // filling these in the Resident form keeps `name` in sync automatically.
+  firstName?: string;
+  lastName?: string;
+  middleName?: string;
+  preferredName?: string;
+  companyName?: string; // for corporate tenants/owners
   mobile: string;
+  altPhone?: string;
   email: string;
+  preferredContactMethod?: string;
+  dob?: string; // ISO date
+  nationality?: string;
+  language?: string; // preferred language for correspondence
+  accessibilityNotes?: string;
   flatId: number;
   buildingId: number;
   unitLabel: string; // denormalized e.g. "A-3"
@@ -29,6 +81,16 @@ export interface Resident {
   moveInDate?: string; // ISO date
   moveOutDate?: string; // ISO date - only set once status is 'former'
   isBillingContact: boolean; // who bills default to when a flat has multiple current residents
+  mailingAddress?: StructuredAddress; // only needed when different from the flat itself (e.g. a former resident, an absentee owner)
+  // Tax / legal identity - separate from the government ID block below,
+  // used for owner statements and any tax-related correspondence.
+  taxLegalName?: string;
+  taxIdType?: string;
+  taxIdLast4?: string; // only the last 4 digits are ever stored - never the full tax ID
+  consentStatus?: string; // 'granted' | 'declined' | 'not_asked' - general data-handling consent
+  marketingConsent?: boolean;
+  dataProcessingConsent?: boolean;
+  jurisdiction?: string; // governing legal jurisdiction for this resident's lease/ownership, e.g. a US state or country
   // ID / compliance record - many jurisdictions require landlords to keep a
   // copy of tenant identification on file. Stored locally only, same as
   // everything else in this app - nothing leaves the device.
@@ -108,6 +170,10 @@ export interface Payment {
   method: string; // configurable in Settings (custom payment methods supported)
   amount: number;
   type: 'Full' | 'Partial';
+  reference?: string; // external reference - cheque no., bank transaction ID, gateway reference...
+  amountDueAtPayment?: number; // snapshot of the invoice balance at the moment this payment was recorded, for audit clarity
+  tenancyId?: number; // links to the active Tenancy this payment applies toward, when known
+  currency?: string; // ISO 4217 code - falls back to company currency when unset
   // Payments are never hard-deleted - they're voided, preserving the audit
   // trail. "Remove" in the UI now means "void and reverse", not delete.
   voided?: boolean;
@@ -207,6 +273,13 @@ export interface DocumentRecord {
   category: string;
   linkType: 'building' | 'flat' | 'resident' | 'none';
   linkId?: number;
+  // Denormalized foreign keys mirroring linkType/linkId, in the same spirit
+  // as the pre-existing buildingId field below - kept for fast, direct
+  // querying (e.g. "all documents for this resident") without having to
+  // filter every document by linkType first. Always kept in sync with
+  // linkType/linkId by the Documents page.
+  residentId?: number;
+  flatId?: number;
   buildingId?: number;
   fileData: Blob; // stored as a native Blob (efficient in IndexedDB) - converted to base64 only at backup/restore time for JSON compatibility
   fileName: string;
@@ -215,6 +288,8 @@ export interface DocumentRecord {
   uploadDate: string; // ISO
   expiryDate?: string; // ISO, optional
   notes?: string;
+  documentStatus?: string; // 'active' | 'archived' | 'superseded'
+  verificationStatus?: string; // 'unverified' | 'verified' | 'rejected' - for compliance-sensitive documents (ID, lease, insurance)
 }
 
 // --- Audit Log ---------------------------------------------------------------
@@ -229,13 +304,15 @@ export type AuditAction =
   | 'resident_created' | 'resident_updated' | 'resident_deleted' | 'resident_archived' | 'resident_unarchived'
   | 'document_uploaded' | 'document_deleted'
   | 'backup_created' | 'restore_performed'
-  | 'data_imported';
+  | 'data_imported'
+  | 'tenancy_created' | 'tenancy_updated' | 'tenancy_deleted'
+  | 'ownership_created' | 'ownership_updated' | 'ownership_deleted';
 
 export interface AuditLogEntry {
   id?: number;
   timestamp: string; // ISO datetime
   action: AuditAction;
-  entityType: 'payment' | 'receipt' | 'bill' | 'deposit' | 'resident' | 'document' | 'backup' | 'building' | 'flat' | 'expense';
+  entityType: 'payment' | 'receipt' | 'bill' | 'deposit' | 'resident' | 'document' | 'backup' | 'building' | 'flat' | 'expense' | 'tenancy' | 'ownership';
   entityId?: number; // id of the affected record, when applicable
   buildingId?: number;
   flatId?: number;
@@ -246,12 +323,115 @@ export interface AuditLogEntry {
   performedBy: string; // no auth system yet, so this is always 'Local User' - kept as a field so it's ready if multi-user login is added later
 }
 
+// --- Tenancy (lease terms) ---------------------------------------------
+
+export const LEASE_TYPES = ['Fixed Term', 'Month-to-Month', 'Short-Term'] as const;
+export const PAYMENT_FREQUENCIES = ['Weekly', 'Monthly', 'Quarterly', 'Annually'] as const;
+export const TENANCY_OCCUPANCY_STATUSES = ['upcoming', 'active', 'ended'] as const;
+
+export interface Tenancy {
+  id?: number;
+  residentId: number;
+  flatId: number;
+  buildingId: number;
+  leaseType: string; // 'Fixed Term' | 'Month-to-Month' | 'Short-Term'
+  leaseStart: string; // ISO date
+  leaseEnd?: string; // ISO date - unset for month-to-month
+  moveIn: string; // ISO date
+  moveOut?: string; // ISO date
+  monthlyRent: number;
+  currency: string; // ISO 4217 code
+  deposit: number;
+  paymentFrequency: string; // 'Weekly' | 'Monthly' | 'Quarterly' | 'Annually'
+  occupancyStatus: string; // 'upcoming' | 'active' | 'ended'
+  notes?: string;
+}
+
+// --- Ownership -----------------------------------------------------------
+
+export const OWNERSHIP_TYPES = ['Sole', 'Joint', 'Corporate', 'Trust'] as const;
+export const OWNERSHIP_STATUSES = ['active', 'former'] as const;
+
+export interface Ownership {
+  id?: number;
+  residentId: number;
+  flatId: number;
+  buildingId: number;
+  status: string; // 'active' | 'former'
+  ownershipPct: number; // 0-100 - the sum of all active owners' % for one flat should never exceed 100 (validated in lib/ownership.ts)
+  purchaseDate: string; // ISO date
+  ownershipType: string; // 'Sole' | 'Joint' | 'Corporate' | 'Trust'
+  notes?: string;
+}
+
+// --- Contact (general secondary contacts, distinct from Emergency) -------
+
+export const CONTACT_TYPES = ['Personal', 'Business', 'Guarantor', 'Agent', 'Other'] as const;
+
+export interface Contact {
+  id?: number;
+  residentId: number;
+  type: string; // 'Personal' | 'Business' | 'Guarantor' | 'Agent' | 'Other'
+  name: string;
+  email?: string;
+  phone?: string;
+  relationship?: string;
+  preferred: boolean; // preferred contact among this resident's Contact records
+}
+
+// --- Emergency Contact -----------------------------------------------------
+
+export interface EmergencyContact {
+  id?: number;
+  residentId: number;
+  name: string;
+  relationship: string;
+  phone: string;
+  email?: string;
+  isPrimary: boolean;
+}
+
+// --- Vehicle -------------------------------------------------------------
+
+export const VEHICLE_TYPES = ['Car', 'Motorcycle', 'Truck', 'Van', 'Bicycle', 'Other'] as const;
+export const VEHICLE_STATUSES = ['active', 'inactive'] as const;
+
+export interface Vehicle {
+  id?: number;
+  residentId: number;
+  flatId: number;
+  buildingId: number;
+  type: string; // 'Car' | 'Motorcycle' | 'Truck' | 'Van' | 'Bicycle' | 'Other'
+  make?: string;
+  model?: string;
+  year?: number;
+  plate: string;
+  state?: string; // issuing state/province for the plate
+  status: string; // 'active' | 'inactive'
+}
+
+// --- Parking Space ---------------------------------------------------------
+
+export const PARKING_TYPES = ['Covered', 'Uncovered', 'Garage', 'Street'] as const;
+export const PARKING_STATUSES = ['assigned', 'vacant', 'reserved'] as const;
+
+export interface ParkingSpace {
+  id?: number;
+  buildingId: number;
+  flatId?: number;
+  residentId?: number;
+  spaceNumber: string;
+  type: string; // 'Covered' | 'Uncovered' | 'Garage' | 'Street'
+  assignedDate?: string; // ISO date
+  status: string; // 'assigned' | 'vacant' | 'reserved'
+}
+
 // --- Import Wizard: saved column-mapping templates -------------------------
 
 export interface ImportTemplate {
   id?: number;
   name: string;
-  entity: 'buildings' | 'flats' | 'residents' | 'expenses';
+  entity: 'buildings' | 'flats' | 'residents' | 'expenses' | 'tenancies' | 'ownerships' | 'contacts' | 'emergencyContacts' | 'vehicles' | 'parkingSpaces';
   mapping: Record<string, string>; // target field key -> source header LABEL (not index - see lib/import/templates.ts)
   createdAt: string; // ISO datetime
 }
@@ -268,12 +448,16 @@ export interface CompanySettings {
   logo?: string; // base64
   signatureImage?: string; // base64 - uploaded or drawn authorized signature
   taxId?: string; // VAT/TIN/BIN registration number, shown on invoices if set
+  taxLabel?: string; // what to call the tax on invoices, e.g. "VAT", "GST", "Sales Tax" - defaults to "Tax"
+  taxRegNumber?: string; // separate from taxId when a jurisdiction distinguishes a tax ID from a formal tax registration number
   defaultTaxRate?: number; // % VAT/tax applied to bills by default
   bankDetails?: string; // payment instructions (bank/mobile banking) shown on invoices
   invoiceNotes?: string; // footer terms/notes shown on invoices
   currencySymbol?: string; // e.g. '$', '€', '£' - shown on every amount
   currencyName?: string; // e.g. 'US Dollars', 'Euros', 'Pounds' - used in "amount in words"
   countryCode?: string; // e.g. '1', '44', '91' - dialing code used to build WhatsApp links
+  dateFormat?: string; // e.g. 'MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD' - display preference, dates are always stored as ISO
+  locale?: string; // BCP 47 locale tag, e.g. 'en-US', 'en-GB' - used for number/date formatting where relevant
   paymentMethods?: string[]; // configurable list shown in every payment-method dropdown
   defaultRates: {
     electricityRate: number;

@@ -5,11 +5,12 @@ import { money, dateLabel, numberToWords } from '@/lib/format';
 import { genInvoiceNo, recordPaymentForBill, isDuplicatePayment } from '@/lib/billing';
 import { buildInvoiceMessage, buildReceiptMessage, whatsappLink, smsLink } from '@/lib/messaging';
 import { printNode } from '@/lib/printUtil';
-import { Printer, Save, RotateCcw, Landmark, Plus, Trash2, MessageCircle, MessageSquare, FileText, Receipt as ReceiptIcon } from 'lucide-react';
+import { Printer, Save, RotateCcw, Landmark, Plus, Trash2, MessageCircle, MessageSquare, FileText, Receipt as ReceiptIcon, Home } from 'lucide-react';
 import InvoiceGenerator from '@/pages/InvoiceGenerator';
 import ReceiptGenerator from '@/pages/ReceiptGenerator';
 import PaymentMethodSelect from '@/components/PaymentMethodSelect';
 import ChargeCombobox from '@/components/ChargeCombobox';
+import { getActiveTenancyForFlat } from '@/lib/tenancy';
 import type { Bill, ChargeLine, Receipt } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -69,6 +70,27 @@ function BillGeneratorForm() {
   const [discount, setDiscount] = useState(0);
   const [taxRate, setTaxRate] = useState(0);
   const [penalty, setPenalty] = useState(0);
+  const [suggestedRent, setSuggestedRent] = useState<number | null>(null);
+
+  // Whenever the selected flat has an active tenancy (or, failing that, a
+  // standard rent set on the flat itself), surface it as a one-click
+  // suggestion rather than silently injecting a charge line - keeps the
+  // existing "you add whichever charges apply" philosophy intact.
+  useEffect(() => {
+    let cancelled = false;
+    if (!flatId) { setSuggestedRent(null); return; }
+    getActiveTenancyForFlat(flatId as number).then((tenancy) => {
+      if (cancelled) return;
+      setSuggestedRent(tenancy?.monthlyRent ?? null);
+    });
+    return () => { cancelled = true; };
+  }, [flatId]);
+
+  function addRentCharge() {
+    if (suggestedRent == null) return;
+    if (charges.some((c) => c.label.trim().toLowerCase() === 'rent')) return;
+    setCharges((prev) => [{ label: 'Rent', amount: suggestedRent }, ...prev]);
+  }
 
   // Pull electricity rate & tax rate defaults from Settings exactly once -
   // charges themselves are no longer auto-populated; the person adds
@@ -253,6 +275,12 @@ function BillGeneratorForm() {
               <Plus size={14} /> Add Charge
             </button>
           </div>
+          {suggestedRent != null && suggestedRent > 0 && !charges.some((c) => c.label.trim().toLowerCase() === 'rent') && (
+            <button onClick={addRentCharge} className="w-full flex items-center justify-between bg-brand-50 rounded-xl px-3 py-2 text-sm text-brand-700 hover:bg-brand-100">
+              <span className="flex items-center gap-2"><Home size={14} /> Active tenancy rent: {money(suggestedRent)}/mo</span>
+              <span className="font-medium">+ Add as charge</span>
+            </button>
+          )}
           <div className="space-y-2">
             {charges.map((c, i) => (
               <div key={i} className="flex flex-wrap items-center gap-2">

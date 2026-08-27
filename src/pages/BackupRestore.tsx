@@ -3,7 +3,7 @@ import { Download, UploadCloud, Info, AlertTriangle, Lock, KeyRound } from 'luci
 import { logAudit } from '@/lib/audit';
 import {
   TABLES, validateBackupShape, validateBackupRecords, buildBackupData, describeBackupTables,
-  restoreFromBackupData, type TableName, type TableBackupStatus,
+  restoreFromBackupData, normalizeLegacyBackupRecords, type TableName, type TableBackupStatus,
 } from '@/lib/backup';
 import { encryptText, decryptText, isEncryptedEnvelope, DecryptionError, type EncryptedEnvelope } from '@/lib/crypto';
 
@@ -63,12 +63,13 @@ export default function BackupRestore() {
       setStatus({ kind: 'error', message: shapeError });
       return;
     }
-    const recordError = validateBackupRecords(data as Record<string, unknown>);
+    const normalized = normalizeLegacyBackupRecords(data as Record<string, any>);
+    const recordError = validateBackupRecords(normalized);
     if (recordError) {
       setStatus({ kind: 'error', message: recordError });
       return;
     }
-    const obj = data as Record<string, any[]>;
+    const obj = normalized as Record<string, any[]>;
     setConfirming({ data: obj, tables: describeBackupTables(obj) });
   }
 

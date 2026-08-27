@@ -7,6 +7,7 @@ import Modal from '@/components/Modal';
 import { dateLabel } from '@/lib/format';
 import { validateImageFileContent, maskIdNumber } from '@/lib/fileValidation';
 import { logAudit } from '@/lib/audit';
+import ResidentExtras from '@/components/residents/ResidentExtras';
 import type { Resident, ResidentType, ResidentStatus } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -14,11 +15,16 @@ function todayISO() { return new Date().toISOString().slice(0, 10); }
 const emptyForm = (flats: { id?: number; buildingId: number; unitNo: string }[]): Resident => {
   const f = flats[0];
   return {
-    name: '', mobile: '', email: '', flatId: f?.id ?? 0, buildingId: f?.buildingId ?? 0, unitLabel: f?.unitNo ?? '',
+    name: '', firstName: '', lastName: '', mobile: '', email: '', flatId: f?.id ?? 0, buildingId: f?.buildingId ?? 0, unitLabel: f?.unitNo ?? '',
     type: 'Tenant', status: 'current', moveInDate: todayISO(), moveOutDate: '', isBillingContact: true,
     idType: '', idNumber: '', idIssueDate: '', idExpiryDate: '', idDocumentBlob: undefined, idDocumentFileType: '',
   };
 };
+
+/** Keeps the legacy `name` field (used everywhere else in the app) in sync whenever first/last name are edited. */
+function composeName(firstName?: string, lastName?: string): string {
+  return [firstName, lastName].filter((s) => s && s.trim()).join(' ').trim();
+}
 
 /** Diffs two residents for the audit trail - only names fields that actually changed, and never includes ID number / document contents (privacy: the audit log records THAT sensitive fields changed, not their values). */
 function diffSummary(before: Resident, after: Resident): string {
@@ -98,6 +104,7 @@ export default function Residents() {
     setRevealId(false); setRevealDoc(false);
     setForm({
       ...r, status: statusOf(r), isBillingContact: isBillingContactOf(r),
+      firstName: r.firstName ?? '', lastName: r.lastName ?? '',
       moveInDate: r.moveInDate ?? '', moveOutDate: r.moveOutDate ?? '',
       idType: r.idType ?? '', idNumber: r.idNumber ?? '', idIssueDate: r.idIssueDate ?? '', idExpiryDate: r.idExpiryDate ?? '',
     });
@@ -313,8 +320,18 @@ export default function Residents() {
 
       <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'Edit Resident' : 'Add Resident'}>
         <div className="space-y-3">
-          <div><label className="label">Full Name *</label>
-            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="label">First Name *</label>
+              <input className="input" value={form.firstName ?? ''} onChange={(e) => {
+                const firstName = e.target.value;
+                setForm({ ...form, firstName, name: composeName(firstName, form.lastName) });
+              }} /></div>
+            <div><label className="label">Last Name</label>
+              <input className="input" value={form.lastName ?? ''} onChange={(e) => {
+                const lastName = e.target.value;
+                setForm({ ...form, lastName, name: composeName(form.firstName, lastName) });
+              }} /></div>
+          </div>
           <div><label className="label">Type</label>
             <select className="input" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as ResidentType })}>
               <option value="Tenant">Tenant</option>
@@ -408,6 +425,13 @@ export default function Residents() {
               <div className="text-[11px] text-gray-400 mt-1">File contents are verified on upload, not just the file extension.</div>
             </div>
           </div>
+
+          {form.id && form.flatId && form.buildingId && (
+            <ResidentExtras residentId={form.id} flatId={form.flatId} buildingId={form.buildingId} type={form.type} />
+          )}
+          {!form.id && (
+            <div className="text-[11px] text-gray-400 pt-2 border-t border-gray-100">Save this resident first to add tenancy/ownership details, contacts, and vehicles.</div>
+          )}
 
           <div className="flex gap-2 pt-2">
             <button onClick={save} className="btn-primary flex-1">Save</button>

@@ -22,7 +22,7 @@ export async function seedSettings() {
 
 export async function seedBuildingFlatResident(): Promise<{ buildingId: number; flatId: number; resident: Resident & { id: number } }> {
   const buildingId = (await db.buildings.add({ name: 'Test Tower', address: '1 Main St', totalFlats: 4 } as Building)) as number;
-  const flatId = (await db.flats.add({ buildingId, unitNo: 'A-1', status: 'occupied' } as Flat)) as number;
+  const flatId = (await db.flats.add({ buildingId, unitNo: 'A-1', occupancyStatus: 'occupied', lifecycleStatus: 'active' } as Flat)) as number;
   const residentId = (await db.residents.add({
     name: 'Jane Doe', mobile: '555-0100', email: 'jane@example.com',
     flatId, buildingId, unitLabel: 'A-1', type: 'Tenant', status: 'current',

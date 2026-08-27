@@ -27,6 +27,12 @@ const ACTION_META: Record<AuditAction, { label: string; icon: any; color: string
   backup_created: { label: 'Backup Created', icon: DatabaseBackup, color: 'text-brand-500' },
   restore_performed: { label: 'Data Restored', icon: UploadCloud, color: 'text-amber-600' },
   data_imported: { label: 'Data Imported', icon: FileSpreadsheet, color: 'text-brand-500' },
+  tenancy_created: { label: 'Tenancy Added', icon: PlusCircle, color: 'text-brand-500' },
+  tenancy_updated: { label: 'Tenancy Updated', icon: Pencil, color: 'text-brand-500' },
+  tenancy_deleted: { label: 'Tenancy Deleted', icon: Trash2, color: 'text-red-500' },
+  ownership_created: { label: 'Ownership Added', icon: PlusCircle, color: 'text-brand-500' },
+  ownership_updated: { label: 'Ownership Updated', icon: Pencil, color: 'text-brand-500' },
+  ownership_deleted: { label: 'Ownership Deleted', icon: Trash2, color: 'text-red-500' },
 };
 
 export default function AuditLog() {

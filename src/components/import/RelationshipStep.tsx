@@ -2,14 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, ArrowLeft, Link2, PlusCircle } from 'lucide-react';
 import type { RefResolution } from '@/lib/import/engine';
 
-type Choice = { raw: string; choice: 'existing' | 'create'; matchedId?: number };
+type Choice = { raw: string; choice: 'existing' | 'create' | 'unresolved'; matchedId?: number };
 
 export default function RelationshipStep({
-  fieldLabel, distinct, getExistingOptions, onBack, onNext,
+  fieldLabel, distinct, getExistingOptions, allowCreate = true, onBack, onNext,
 }: {
-  fieldLabel: string; // "Building" or "Unit"
+  fieldLabel: string; // "Building", "Unit", or "Resident"
   distinct: Map<string, RefResolution>; // key -> initial resolution (matched/unmatched)
   getExistingOptions: (key: string) => { id: number; label: string }[]; // options for one distinct entry (e.g. flats scoped to that entry's building)
+  allowCreate?: boolean; // false for resident references - a resident needs too much required info to auto-create from a child-table import
   onBack: () => void;
   onNext: (resolutions: Map<string, RefResolution>) => void;
 }) {
@@ -20,13 +21,14 @@ export default function RelationshipStep({
     for (const [key, res] of distinct) {
       initial[key] = res.status === 'matched'
         ? { raw: res.raw, choice: 'existing', matchedId: res.matchedId }
-        : { raw: res.raw, choice: 'create' };
+        : { raw: res.raw, choice: allowCreate ? 'create' : 'unresolved' };
     }
     setChoices(initial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [distinct]);
+  }, [distinct, allowCreate]);
 
   const entries = useMemo(() => Array.from(distinct.entries()), [distinct]);
+  const unresolvedCount = entries.filter(([key]) => choices[key]?.choice === 'unresolved').length;
 
   function setChoice(key: string, choice: Choice) {
     setChoices((prev) => ({ ...prev, [key]: choice }));
@@ -35,9 +37,9 @@ export default function RelationshipStep({
   function proceed() {
     const resolved = new Map<string, RefResolution>();
     for (const [key, c] of Object.entries(choices)) {
-      resolved.set(key, c.choice === 'existing' && c.matchedId
-        ? { raw: c.raw, status: 'matched', matchedId: c.matchedId }
-        : { raw: c.raw, status: 'create' });
+      if (c.choice === 'existing' && c.matchedId) resolved.set(key, { raw: c.raw, status: 'matched', matchedId: c.matchedId });
+      else if (c.choice === 'create') resolved.set(key, { raw: c.raw, status: 'create' });
+      else resolved.set(key, { raw: c.raw, status: 'unmatched' });
     }
     onNext(resolved);
   }
@@ -53,27 +55,32 @@ export default function RelationshipStep({
       <div>
         <h3 className="font-semibold text-gray-800 flex items-center gap-2"><Link2 size={18} /> Match {fieldLabel} References</h3>
         <p className="text-sm text-gray-500">
-          Your file references {entries.length} distinct {fieldLabel.toLowerCase()} value{entries.length > 1 ? 's' : ''}. Match each to an existing record, or create a new one automatically during import.
+          Your file references {entries.length} distinct {fieldLabel.toLowerCase()} value{entries.length > 1 ? 's' : ''}.
+          {allowCreate
+            ? ' Match each to an existing record, or create a new one automatically during import.'
+            : ` Match each to an existing ${fieldLabel.toLowerCase()} — rows that can't be matched will be skipped with an error.`}
         </p>
       </div>
 
       <div className="card divide-y divide-gray-100 overflow-hidden">
         {entries.map(([key, res]) => {
-          const c = choices[key] ?? { raw: res.raw, choice: res.status === 'matched' ? 'existing' : 'create', matchedId: res.matchedId };
+          const c = choices[key] ?? { raw: res.raw, choice: res.status === 'matched' ? 'existing' : (allowCreate ? 'create' : 'unresolved'), matchedId: res.matchedId };
           const options = getExistingOptions(key);
           return (
             <div key={key} className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3">
               <div className="sm:w-56 shrink-0 text-sm font-medium text-gray-800 truncate" title={res.raw}>"{res.raw}"</div>
               <select
                 className="input sm:flex-1"
-                value={c.choice === 'existing' && c.matchedId ? String(c.matchedId) : 'create'}
+                value={c.choice === 'existing' && c.matchedId ? String(c.matchedId) : c.choice}
                 onChange={(e) => {
                   const v = e.target.value;
                   if (v === 'create') setChoice(key, { raw: res.raw, choice: 'create' });
+                  else if (v === 'unresolved') setChoice(key, { raw: res.raw, choice: 'unresolved' });
                   else setChoice(key, { raw: res.raw, choice: 'existing', matchedId: Number(v) });
                 }}
               >
-                <option value="create">+ Create new {fieldLabel.toLowerCase()} "{res.raw}"</option>
+                {!allowCreate && <option value="unresolved">— Leave unmatched (row will error) —</option>}
+                {allowCreate && <option value="create">+ Create new {fieldLabel.toLowerCase()} "{res.raw}"</option>}
                 {options.map((o) => (
                   <option key={o.id} value={o.id}>{o.label}</option>
                 ))}
@@ -85,6 +92,10 @@ export default function RelationshipStep({
           );
         })}
       </div>
+
+      {unresolvedCount > 0 && (
+        <div className="text-xs text-amber-600">{unresolvedCount} value{unresolvedCount > 1 ? 's are' : ' is'} still unmatched — matching rows will be skipped with an error unless you pick a record above.</div>
+      )}
 
       <div className="flex gap-2 pt-1">
         <button className="btn-secondary flex items-center gap-1.5" onClick={onBack}><ArrowLeft size={16} /> Back</button>

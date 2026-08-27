@@ -4,7 +4,7 @@
 // engine (see engine.ts) is entirely generic and reads these definitions.
 
 export type ImportFieldType = 'string' | 'number' | 'date' | 'boolean' | 'enum';
-export type ImportEntityKey = 'buildings' | 'flats' | 'residents' | 'expenses';
+export type ImportEntityKey = 'buildings' | 'flats' | 'residents' | 'expenses' | 'tenancies' | 'ownerships' | 'contacts' | 'emergencyContacts' | 'vehicles' | 'parkingSpaces';
 
 export interface ImportFieldDef {
   key: string; // becomes the DB field name, EXCEPT for keys ending in "Ref" -
@@ -15,7 +15,7 @@ export interface ImportFieldDef {
   required: boolean;
   enumValues?: readonly string[];
   defaultValue?: any;
-  refEntity?: 'building' | 'flat'; // this column's text must resolve to another entity's id
+  refEntity?: 'building' | 'flat' | 'resident'; // this column's text must resolve to another entity's id
   aliases: string[]; // header-name guesses used for auto-mapping (normalized at match time)
   example: string; // sample value used in downloadable CSV templates
 }
@@ -124,14 +124,136 @@ export const EXPENSES_DEF: ImportEntityDef = {
   matchKeyGroups: [['buildingId', 'date', 'amount', 'vendor']],
 };
 
+export const TENANCIES_DEF: ImportEntityDef = {
+  key: 'tenancies',
+  label: 'Tenancies',
+  description: 'One row per lease. The resident is matched by full name - their building/flat come from that resident record.',
+  fields: [
+    { key: 'residentRef', label: 'Resident Name', type: 'string', required: true, refEntity: 'resident',
+      aliases: ['resident', 'residentname', 'tenant', 'tenantname', 'name'], example: 'Jane Doe' },
+    { key: 'leaseType', label: 'Lease Type', type: 'enum', required: false, enumValues: ['Fixed Term', 'Month-to-Month', 'Short-Term'], defaultValue: 'Fixed Term',
+      aliases: ['leasetype', 'type'], example: 'Fixed Term' },
+    { key: 'leaseStart', label: 'Lease Start', type: 'date', required: true, aliases: ['leasestart', 'startdate'], example: '2024-01-01' },
+    { key: 'leaseEnd', label: 'Lease End', type: 'date', required: false, aliases: ['leaseend', 'enddate'], example: '2024-12-31' },
+    { key: 'moveIn', label: 'Move-In Date', type: 'date', required: true, aliases: ['movein', 'movindate'], example: '2024-01-01' },
+    { key: 'moveOut', label: 'Move-Out Date', type: 'date', required: false, aliases: ['moveout', 'moveoutdate'], example: '' },
+    { key: 'monthlyRent', label: 'Monthly Rent', type: 'number', required: true, aliases: ['monthlyrent', 'rent'], example: '1200' },
+    { key: 'currency', label: 'Currency', type: 'string', required: false, defaultValue: 'USD', aliases: ['currency'], example: 'USD' },
+    { key: 'deposit', label: 'Deposit', type: 'number', required: false, defaultValue: 0, aliases: ['deposit', 'securitydeposit'], example: '1200' },
+    { key: 'paymentFrequency', label: 'Payment Frequency', type: 'enum', required: false, enumValues: ['Weekly', 'Monthly', 'Quarterly', 'Annually'], defaultValue: 'Monthly',
+      aliases: ['paymentfrequency', 'frequency'], example: 'Monthly' },
+    { key: 'occupancyStatus', label: 'Status', type: 'enum', required: false, enumValues: ['upcoming', 'active', 'ended'], defaultValue: 'active',
+      aliases: ['status', 'occupancystatus'], example: 'active' },
+  ],
+  matchKeyGroups: [['residentId', 'leaseStart']],
+};
+
+export const OWNERSHIPS_DEF: ImportEntityDef = {
+  key: 'ownerships',
+  label: 'Ownerships',
+  description: 'One row per owner record. The resident is matched by full name - their building/flat come from that resident record.',
+  fields: [
+    { key: 'residentRef', label: 'Owner Name', type: 'string', required: true, refEntity: 'resident',
+      aliases: ['resident', 'owner', 'ownername', 'name'], example: 'Jane Doe' },
+    { key: 'status', label: 'Status', type: 'enum', required: false, enumValues: ['active', 'former'], defaultValue: 'active',
+      aliases: ['status'], example: 'active' },
+    { key: 'ownershipPct', label: 'Ownership %', type: 'number', required: true, aliases: ['ownershippct', 'percentage', 'share'], example: '100' },
+    { key: 'purchaseDate', label: 'Purchase Date', type: 'date', required: true, aliases: ['purchasedate'], example: '2020-06-01' },
+    { key: 'ownershipType', label: 'Ownership Type', type: 'enum', required: false, enumValues: ['Sole', 'Joint', 'Corporate', 'Trust'], defaultValue: 'Sole',
+      aliases: ['ownershiptype'], example: 'Sole' },
+  ],
+  matchKeyGroups: [['residentId', 'purchaseDate']],
+};
+
+export const CONTACTS_DEF: ImportEntityDef = {
+  key: 'contacts',
+  label: 'Additional Contacts',
+  description: 'One row per secondary contact for a resident. The resident is matched by full name.',
+  fields: [
+    { key: 'residentRef', label: 'Resident Name', type: 'string', required: true, refEntity: 'resident',
+      aliases: ['resident', 'residentname'], example: 'Jane Doe' },
+    { key: 'type', label: 'Contact Type', type: 'enum', required: false, enumValues: ['Personal', 'Business', 'Guarantor', 'Agent', 'Other'], defaultValue: 'Personal',
+      aliases: ['type', 'contacttype'], example: 'Personal' },
+    { key: 'name', label: 'Contact Name', type: 'string', required: true, aliases: ['name', 'contactname'], example: 'John Doe' },
+    { key: 'email', label: 'Email', type: 'string', required: false, aliases: ['email'], example: '' },
+    { key: 'phone', label: 'Phone', type: 'string', required: false, aliases: ['phone'], example: '' },
+    { key: 'relationship', label: 'Relationship', type: 'string', required: false, aliases: ['relationship'], example: 'Spouse' },
+    { key: 'preferred', label: 'Preferred', type: 'boolean', required: false, defaultValue: false, aliases: ['preferred'], example: 'No' },
+  ],
+  matchKeyGroups: [['residentId', 'name']],
+};
+
+export const EMERGENCY_CONTACTS_DEF: ImportEntityDef = {
+  key: 'emergencyContacts',
+  label: 'Emergency Contacts',
+  description: 'One row per emergency contact for a resident. The resident is matched by full name.',
+  fields: [
+    { key: 'residentRef', label: 'Resident Name', type: 'string', required: true, refEntity: 'resident',
+      aliases: ['resident', 'residentname'], example: 'Jane Doe' },
+    { key: 'name', label: 'Contact Name', type: 'string', required: true, aliases: ['name', 'contactname'], example: 'John Doe' },
+    { key: 'relationship', label: 'Relationship', type: 'string', required: true, aliases: ['relationship'], example: 'Spouse' },
+    { key: 'phone', label: 'Phone', type: 'string', required: true, aliases: ['phone'], example: '+1 555 0100' },
+    { key: 'email', label: 'Email', type: 'string', required: false, aliases: ['email'], example: '' },
+    { key: 'isPrimary', label: 'Primary', type: 'boolean', required: false, defaultValue: false, aliases: ['isprimary', 'primary'], example: 'Yes' },
+  ],
+  matchKeyGroups: [['residentId', 'name']],
+};
+
+export const VEHICLES_DEF: ImportEntityDef = {
+  key: 'vehicles',
+  label: 'Vehicles',
+  description: 'One row per vehicle. The resident is matched by full name.',
+  fields: [
+    { key: 'residentRef', label: 'Resident Name', type: 'string', required: true, refEntity: 'resident',
+      aliases: ['resident', 'residentname'], example: 'Jane Doe' },
+    { key: 'type', label: 'Vehicle Type', type: 'enum', required: false, enumValues: ['Car', 'Motorcycle', 'Truck', 'Van', 'Bicycle', 'Other'], defaultValue: 'Car',
+      aliases: ['type', 'vehicletype'], example: 'Car' },
+    { key: 'make', label: 'Make', type: 'string', required: false, aliases: ['make'], example: 'Toyota' },
+    { key: 'model', label: 'Model', type: 'string', required: false, aliases: ['model'], example: 'Camry' },
+    { key: 'year', label: 'Year', type: 'number', required: false, aliases: ['year'], example: '2020' },
+    { key: 'plate', label: 'License Plate', type: 'string', required: true, aliases: ['plate', 'licenseplate', 'platenumber'], example: 'ABC-1234' },
+    { key: 'state', label: 'State/Province', type: 'string', required: false, aliases: ['state', 'province'], example: '' },
+    { key: 'status', label: 'Status', type: 'enum', required: false, enumValues: ['active', 'inactive'], defaultValue: 'active',
+      aliases: ['status'], example: 'active' },
+  ],
+  matchKeyGroups: [['residentId', 'plate']],
+};
+
+export const PARKING_SPACES_DEF: ImportEntityDef = {
+  key: 'parkingSpaces',
+  label: 'Parking Spaces',
+  description: 'One row per parking space. Building is matched by name; resident (if assigned) is matched by full name.',
+  fields: [
+    { key: 'buildingRef', label: 'Building Name', type: 'string', required: true, refEntity: 'building',
+      aliases: ['building', 'buildingname'], example: 'Sunset Tower' },
+    { key: 'residentRef', label: 'Assigned Resident (optional)', type: 'string', required: false, refEntity: 'resident',
+      aliases: ['resident', 'residentname', 'assignedto'], example: '' },
+    { key: 'spaceNumber', label: 'Space Number', type: 'string', required: true, aliases: ['spacenumber', 'space', 'spotnumber'], example: 'P-12' },
+    { key: 'type', label: 'Type', type: 'enum', required: false, enumValues: ['Covered', 'Uncovered', 'Garage', 'Street'], defaultValue: 'Uncovered',
+      aliases: ['type', 'parkingtype'], example: 'Covered' },
+    { key: 'assignedDate', label: 'Assigned Date', type: 'date', required: false, aliases: ['assigneddate'], example: '' },
+    { key: 'status', label: 'Status', type: 'enum', required: false, enumValues: ['assigned', 'vacant', 'reserved'], defaultValue: 'vacant',
+      aliases: ['status'], example: 'vacant' },
+  ],
+  matchKeyGroups: [['buildingId', 'spaceNumber']],
+};
+
 export const IMPORT_ENTITIES: Record<ImportEntityKey, ImportEntityDef> = {
   buildings: BUILDINGS_DEF,
   flats: FLATS_DEF,
   residents: RESIDENTS_DEF,
   expenses: EXPENSES_DEF,
+  tenancies: TENANCIES_DEF,
+  ownerships: OWNERSHIPS_DEF,
+  contacts: CONTACTS_DEF,
+  emergencyContacts: EMERGENCY_CONTACTS_DEF,
+  vehicles: VEHICLES_DEF,
+  parkingSpaces: PARKING_SPACES_DEF,
 };
 
-export const IMPORT_ENTITY_ORDER: ImportEntityKey[] = ['buildings', 'flats', 'residents', 'expenses'];
+export const IMPORT_ENTITY_ORDER: ImportEntityKey[] = [
+  'buildings', 'flats', 'residents', 'expenses', 'tenancies', 'ownerships', 'contacts', 'emergencyContacts', 'vehicles', 'parkingSpaces',
+];
 
 /** Lowercase, alphanumeric-only form used to fuzzily compare header text, entity/building/unit names, etc. */
 export function normalizeHeader(s: string): string {
@@ -141,6 +263,12 @@ export function normalizeHeader(s: string): string {
 /** Best-guess entity for a sheet, based on its tab name. Returns null if nothing matches (user picks manually). */
 export function guessEntityFromSheetName(name: string): ImportEntityKey | null {
   const n = normalizeHeader(name);
+  if (/tenanc|lease/.test(n)) return 'tenancies';
+  if (/ownership|owner/.test(n)) return 'ownerships';
+  if (/emergency/.test(n)) return 'emergencyContacts';
+  if (/contact/.test(n)) return 'contacts';
+  if (/vehicle|car/.test(n)) return 'vehicles';
+  if (/parking/.test(n)) return 'parkingSpaces';
   if (/building|propert/.test(n)) return 'buildings';
   if (/flat|unit|apartment/.test(n)) return 'flats';
   if (/resident|tenant|owner/.test(n)) return 'residents';

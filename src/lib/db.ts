@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie';
 import type {
   Building, Flat, Resident, Bill, Receipt, Payment, CompanySettings,
   DepositTransaction, MaintenanceRequest, Expense, Reminder, DocumentRecord, AuditLogEntry, ImportTemplate,
+  Tenancy, Ownership, Contact, EmergencyContact, Vehicle, ParkingSpace,
 } from '@/types';
 import { base64ToBlob } from '@/lib/fileValidation';
 
@@ -20,6 +21,12 @@ export class PropentraDB extends Dexie {
   documents!: Table<DocumentRecord, number>;
   auditLog!: Table<AuditLogEntry, number>;
   importTemplates!: Table<ImportTemplate, number>;
+  tenancies!: Table<Tenancy, number>;
+  ownerships!: Table<Ownership, number>;
+  contacts!: Table<Contact, number>;
+  emergencyContacts!: Table<EmergencyContact, number>;
+  vehicles!: Table<Vehicle, number>;
+  parkingSpaces!: Table<ParkingSpace, number>;
 
   constructor() {
     // The physical IndexedDB name is intentionally left as-is even after the
@@ -149,6 +156,68 @@ export class PropentraDB extends Dexie {
       auditLog: '++id, entityType, entityId, action, timestamp, residentId',
       importTemplates: '++id, entity',
     });
+
+    // v6: adds Tenancy, Ownership, Contact, EmergencyContact, Vehicle, and
+    // ParkingSpace tables; restructures Flat.status -> occupancyStatus (+ new
+    // lifecycleStatus) and backfills denormalized Document resident/flat ids.
+    // Every other field added this version (structured address, resident
+    // name parts, payment reference, etc.) is a plain optional column and
+    // needs no migration - Dexie/IndexedDB records don't need a column to
+    // exist until something writes to it.
+    this.version(6)
+      .stores({
+        buildings: '++id, name',
+        flats: '++id, buildingId, unitNo, occupancyStatus, lifecycleStatus',
+        residents: '++id, name, buildingId, flatId, type, status',
+        bills: '++id, invoiceNo, buildingId, flatId, residentId, status, billingMonth',
+        receipts: '++id, receiptNo, invoiceId, residentId, voided',
+        payments: '++id, invoiceId, residentId, date, voided, tenancyId',
+        settings: '++id',
+        depositTransactions: '++id, residentId, buildingId, flatId, type, date',
+        maintenanceRequests: '++id, buildingId, flatId, status, priority, reportedDate',
+        expenses: '++id, buildingId, flatId, category, date',
+        reminders: '++id, dueDate, status, priority, linkType, linkId',
+        documents: '++id, linkType, linkId, buildingId, flatId, residentId, category, expiryDate',
+        auditLog: '++id, entityType, entityId, action, timestamp, residentId',
+        importTemplates: '++id, entity',
+        tenancies: '++id, residentId, flatId, buildingId, occupancyStatus, leaseEnd',
+        ownerships: '++id, residentId, flatId, buildingId, status',
+        contacts: '++id, residentId, type',
+        emergencyContacts: '++id, residentId, isPrimary',
+        vehicles: '++id, residentId, flatId, buildingId, plate, status',
+        parkingSpaces: '++id, buildingId, flatId, residentId, status',
+      })
+      .upgrade(async (tx) => {
+        const nowIso = new Date().toISOString();
+
+        await tx.table('buildings').toCollection().modify((b: any) => {
+          if (!b.status) b.status = 'active';
+          if (b.createdAt === undefined) b.createdAt = nowIso;
+          if (b.updatedAt === undefined) b.updatedAt = nowIso;
+        });
+
+        await tx.table('flats').toCollection().modify((f: any) => {
+          f.occupancyStatus = f.status === 'occupied' ? 'occupied' : 'vacant';
+          delete f.status;
+          if (!f.lifecycleStatus) f.lifecycleStatus = 'active';
+        });
+
+        // Best-effort split of the existing single `name` field into
+        // firstName/lastName - `name` itself is left completely untouched,
+        // so nothing that already reads it is affected. Purely additive.
+        await tx.table('residents').toCollection().modify((r: any) => {
+          if (!r.firstName && !r.lastName && typeof r.name === 'string' && r.name.trim()) {
+            const parts = r.name.trim().split(/\s+/);
+            r.firstName = parts[0];
+            r.lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+          }
+        });
+
+        await tx.table('documents').toCollection().modify((d: any) => {
+          if (d.linkType === 'resident' && d.linkId) d.residentId = d.linkId;
+          if (d.linkType === 'flat' && d.linkId) d.flatId = d.linkId;
+        });
+      });
   }
 }
 

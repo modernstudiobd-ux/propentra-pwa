@@ -110,6 +110,22 @@ export default function SettingsPage() {
               <input className="input" value={form.taxId ?? ''} placeholder="e.g. BIN-000000000-0000" onChange={(e) => setForm({ ...form, taxId: e.target.value })} />
               <div className="text-[11px] text-gray-400 mt-1">Shown on invoices under your company address if filled in.</div>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label">Tax Label (optional)</label>
+                <input className="input" placeholder="e.g. VAT, GST, Sales Tax" value={form.taxLabel ?? ''} onChange={(e) => setForm({ ...form, taxLabel: e.target.value })} /></div>
+              <div><label className="label">Tax Registration No. (optional)</label>
+                <input className="input" value={form.taxRegNumber ?? ''} onChange={(e) => setForm({ ...form, taxRegNumber: e.target.value })} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="label">Date Format</label>
+                <select className="input" value={form.dateFormat ?? 'MM/DD/YYYY'} onChange={(e) => setForm({ ...form, dateFormat: e.target.value })}>
+                  <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                  <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                  <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                </select></div>
+              <div><label className="label">Locale (optional)</label>
+                <input className="input" placeholder="e.g. en-US" value={form.locale ?? ''} onChange={(e) => setForm({ ...form, locale: e.target.value })} /></div>
+            </div>
             <div>
               <label className="label">Logo</label>
               <div className="flex items-center gap-3">

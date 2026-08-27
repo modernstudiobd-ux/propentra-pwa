@@ -21,17 +21,29 @@ export interface ProcessedRow {
   included: boolean; // user can manually exclude a row from the preview
 }
 
-const TABLE_MAP: Record<ImportEntityKey, 'buildings' | 'flats' | 'residents' | 'expenses'> = {
+const TABLE_MAP: Record<ImportEntityKey, 'buildings' | 'flats' | 'residents' | 'expenses' | 'tenancies' | 'ownerships' | 'contacts' | 'emergencyContacts' | 'vehicles' | 'parkingSpaces'> = {
   buildings: 'buildings', flats: 'flats', residents: 'residents', expenses: 'expenses',
+  tenancies: 'tenancies', ownerships: 'ownerships', contacts: 'contacts', emergencyContacts: 'emergencyContacts',
+  vehicles: 'vehicles', parkingSpaces: 'parkingSpaces',
 };
 
-const ENTITY_AUDIT_TYPE: Record<ImportEntityKey, 'building' | 'flat' | 'resident' | 'expense'> = {
+const ENTITY_AUDIT_TYPE: Record<ImportEntityKey, 'building' | 'flat' | 'resident' | 'expense' | 'tenancy' | 'ownership'> = {
   buildings: 'building', flats: 'flat', residents: 'resident', expenses: 'expense',
+  tenancies: 'tenancy', ownerships: 'ownership', contacts: 'resident', emergencyContacts: 'resident',
+  vehicles: 'resident', parkingSpaces: 'building',
+};
+
+// Entities whose DB record needs buildingId/flatId even though the import
+// schema has no explicit Building/Unit column for them - those two fields
+// are copied straight from the resolved resident instead (see commitImport).
+const DERIVE_LOCATION_FROM_RESIDENT: Partial<Record<ImportEntityKey, true>> = {
+  tenancies: true, ownerships: true, vehicles: true,
 };
 
 function refFieldTarget(fieldKey: string): string {
   if (fieldKey === 'buildingRef') return 'buildingId';
   if (fieldKey === 'flatRef') return 'flatId';
+  if (fieldKey === 'residentRef') return 'residentId';
   return fieldKey;
 }
 
@@ -147,11 +159,28 @@ export async function resolveFlatRefs(rows: ProcessedRow[]): Promise<Map<string,
   return distinct;
 }
 
-/** Applies the user's confirmed choices for each distinct building/flat value back onto every row, and turns any value still left unmatched into a row-level error. */
+/** Distinct resident-name values across all rows, matched by normalized full name. Ambiguous only when two residents share the exact name - the person resolves that manually in the relationship step, same as an unmatched building/unit. Never offers "create new": a resident needs far more required information than any of these child tables provide. */
+export async function resolveResidentRefs(rows: ProcessedRow[]): Promise<Map<string, RefResolution>> {
+  const existing = await db.residents.toArray();
+  const byName = new Map(existing.map((r) => [normalizeHeader(r.name), r]));
+  const distinct = new Map<string, RefResolution>();
+  for (const row of rows) {
+    const ref = row.refs['residentRef'];
+    if (!ref || !ref.raw) continue;
+    const key = normalizeHeader(ref.raw);
+    if (distinct.has(key)) continue;
+    const match = byName.get(key);
+    distinct.set(key, match ? { raw: ref.raw, status: 'matched', matchedId: match.id } : { raw: ref.raw, status: 'unmatched' });
+  }
+  return distinct;
+}
+
+/** Applies the user's confirmed choices for each distinct building/flat/resident value back onto every row, and turns any value still left unmatched into a row-level error. */
 export function applyRefResolutions(
   rows: ProcessedRow[],
   buildingResolutions: Map<string, RefResolution>,
-  flatResolutions: Map<string, RefResolution>
+  flatResolutions: Map<string, RefResolution>,
+  residentResolutions?: Map<string, RefResolution>
 ) {
   for (const row of rows) {
     const bRef = row.refs['buildingRef'];
@@ -171,9 +200,15 @@ export function applyRefResolutions(
       }
     }
 
+    const rRef = row.refs['residentRef'];
+    if (rRef?.raw && residentResolutions) {
+      const resolved = residentResolutions.get(normalizeHeader(rRef.raw));
+      if (resolved) row.refs['residentRef'] = resolved;
+    }
+
     for (const [fieldKey, ref] of Object.entries(row.refs)) {
       if (ref.raw && ref.status === 'unmatched') {
-        const label = fieldKey === 'buildingRef' ? 'Building' : 'Unit';
+        const label = fieldKey === 'buildingRef' ? 'Building' : fieldKey === 'flatRef' ? 'Unit' : 'Resident';
         const msg = `Could not match ${label} "${ref.raw}" to an existing record.`;
         if (!row.errors.includes(msg)) row.errors.push(msg);
       }
@@ -247,7 +282,11 @@ export async function commitImport(def: ImportEntityDef, rows: ProcessedRow[]): 
   const flatCache = new Map<string, number>(); // `${buildingId}::${normalizedUnit}` -> id, created earlier in THIS run
 
   try {
-    await db.transaction('rw', db.buildings, db.flats, db.residents, db.expenses, db.auditLog, async () => {
+    await db.transaction(
+      'rw',
+      [db.buildings, db.flats, db.residents, db.expenses, db.auditLog,
+       db.tenancies, db.ownerships, db.contacts, db.emergencyContacts, db.vehicles, db.parkingSpaces],
+      async () => {
       for (const row of rows) {
         if (!row.included || row.errors.length > 0) {
           skipped++;
@@ -285,11 +324,18 @@ export async function commitImport(def: ImportEntityDef, rows: ProcessedRow[]): 
             const cacheKey = `${idOverrides.buildingRef}::${normalizeHeader(fRef.raw)}`;
             let id = flatCache.get(cacheKey);
             if (id === undefined) {
-              id = (await db.flats.add({ buildingId: idOverrides.buildingRef, unitNo: fRef.raw, status: 'vacant' })) as number;
+              id = (await db.flats.add({ buildingId: idOverrides.buildingRef, unitNo: fRef.raw, occupancyStatus: 'vacant', lifecycleStatus: 'active' })) as number;
               flatCache.set(cacheKey, id);
             }
             idOverrides.flatRef = id;
           }
+        }
+
+        const rRef = row.refs['residentRef'];
+        let matchedResident: any = undefined;
+        if (rRef?.raw && rRef.status === 'matched' && rRef.matchedId) {
+          idOverrides.residentRef = rRef.matchedId;
+          matchedResident = await db.residents.get(rRef.matchedId);
         }
 
         const finalRecord = previewRecord(def, row);
@@ -297,6 +343,17 @@ export async function commitImport(def: ImportEntityDef, rows: ProcessedRow[]): 
         // Residents carry a denormalized unit label alongside flatId, same
         // convention used everywhere else in the app (see types/index.ts).
         if (def.key === 'residents' && fRef?.raw) finalRecord.unitLabel = fRef.raw;
+        // Tenancy/Ownership/Vehicle have no Building/Unit columns of their
+        // own in the import sheet - their building/flat is simply wherever
+        // the matched resident already lives.
+        if (DERIVE_LOCATION_FROM_RESIDENT[def.key] && matchedResident) {
+          finalRecord.buildingId = matchedResident.buildingId;
+          finalRecord.flatId = matchedResident.flatId;
+        }
+        // Parking spaces may optionally be pre-assigned to a resident's unit.
+        if (def.key === 'parkingSpaces' && matchedResident && finalRecord.flatId === undefined) {
+          finalRecord.flatId = matchedResident.flatId;
+        }
 
         if (row.duplicate && row.decision === 'update') {
           await (db as any)[tableName].update(row.duplicate.matchedId, finalRecord);

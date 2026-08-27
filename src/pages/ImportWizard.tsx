@@ -10,7 +10,7 @@ import {
   IMPORT_ENTITIES, IMPORT_ENTITY_ORDER, guessEntityFromSheetName, normalizeHeader, type ImportEntityKey,
 } from '@/lib/import/schemas';
 import {
-  buildProcessedRows, resolveBuildingRefs, resolveFlatRefs, applyRefResolutions, detectDuplicates,
+  buildProcessedRows, resolveBuildingRefs, resolveFlatRefs, resolveResidentRefs, applyRefResolutions, detectDuplicates,
   commitImport, ImportRollbackError, type ProcessedRow, type RefResolution, type DuplicateDecision, type ImportRunResult,
 } from '@/lib/import/engine';
 import { downloadCsvTemplate, downloadErrorReport } from '@/lib/import/csvExport';
@@ -18,7 +18,7 @@ import MappingStep from '@/components/import/MappingStep';
 import RelationshipStep from '@/components/import/RelationshipStep';
 import PreviewStep from '@/components/import/PreviewStep';
 
-type WizardPhase = 'upload' | 'queue' | 'mapping' | 'relBuilding' | 'relFlat' | 'preview' | 'result' | 'done';
+type WizardPhase = 'upload' | 'queue' | 'mapping' | 'relBuilding' | 'relFlat' | 'relResident' | 'preview' | 'result' | 'done';
 
 interface SheetJob {
   sheet: ParsedSheet;
@@ -47,12 +47,14 @@ export default function ImportWizard() {
   const [rows, setRows] = useState<ProcessedRow[]>([]);
   const [buildingDistinct, setBuildingDistinct] = useState<Map<string, RefResolution>>(new Map());
   const [flatDistinct, setFlatDistinct] = useState<Map<string, RefResolution>>(new Map());
+  const [residentDistinct, setResidentDistinct] = useState<Map<string, RefResolution>>(new Map());
   const [globalDecision, setGlobalDecision] = useState<DuplicateDecision>('skip');
   const [lastResult, setLastResult] = useState<SheetOutcome | null>(null);
   const [outcomes, setOutcomes] = useState<SheetOutcome[]>([]);
 
   const allBuildings = useLiveQuery(() => db.buildings.toArray(), [phase]) ?? [];
   const allFlats = useLiveQuery(() => db.flats.toArray(), [phase]) ?? [];
+  const allResidents = useLiveQuery(() => db.residents.toArray(), [phase]) ?? [];
 
   const currentJob = jobs[jobIndex] ?? null;
   const currentDef = currentJob?.entity ? IMPORT_ENTITIES[currentJob.entity] : null;
@@ -119,7 +121,7 @@ export default function ImportWizard() {
         setPhase('relBuilding');
       } else {
         setRows(processed);
-        await goToPreview(processed);
+        await proceedToResidentOrPreview(processed);
       }
     } finally {
       setBusy(false);
@@ -137,7 +139,7 @@ export default function ImportWizard() {
         setFlatDistinct(distinct);
         setPhase('relFlat');
       } else {
-        await goToPreview(rows);
+        await proceedToResidentOrPreview(rows);
       }
     } finally {
       setBusy(false);
@@ -148,6 +150,29 @@ export default function ImportWizard() {
     setBusy(true);
     try {
       applyRefResolutions(rows, new Map(), resolutions);
+      await proceedToResidentOrPreview(rows);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function proceedToResidentOrPreview(processedRows: ProcessedRow[]) {
+    if (!currentDef) return;
+    const hasResidentRef = currentDef.fields.some((f) => f.refEntity === 'resident');
+    if (hasResidentRef) {
+      const distinct = await resolveResidentRefs(processedRows);
+      setResidentDistinct(distinct);
+      setRows(processedRows);
+      setPhase('relResident');
+    } else {
+      await goToPreview(processedRows);
+    }
+  }
+
+  async function proceedFromResidentRels(resolutions: Map<string, RefResolution>) {
+    setBusy(true);
+    try {
+      applyRefResolutions(rows, new Map(), new Map(), resolutions);
       await goToPreview(rows);
     } finally {
       setBusy(false);
@@ -327,6 +352,20 @@ export default function ImportWizard() {
         </div>
       )}
 
+      {phase === 'relResident' && currentDef && (
+        <div className="card p-6">
+          <SheetProgress job={currentJob!} outcomes={outcomes} jobs={jobs} />
+          <RelationshipStep
+            fieldLabel="Resident"
+            distinct={residentDistinct}
+            allowCreate={false}
+            getExistingOptions={() => allResidents.map((r) => ({ id: r.id as number, label: r.name })).sort((a, b) => a.label.localeCompare(b.label))}
+            onBack={() => setPhase(currentDef.fields.some((f) => f.refEntity === 'flat') ? 'relFlat' : currentDef.fields.some((f) => f.refEntity === 'building') ? 'relBuilding' : 'mapping')}
+            onNext={proceedFromResidentRels}
+          />
+        </div>
+      )}
+
       {phase === 'preview' && currentDef && (
         <div className="card p-6">
           <SheetProgress job={currentJob!} outcomes={outcomes} jobs={jobs} />
@@ -336,7 +375,11 @@ export default function ImportWizard() {
             globalDecision={globalDecision}
             onGlobalDecisionChange={setGlobalDecision}
             onRowsChange={setRows}
-            onBack={() => setPhase(currentDef.fields.some((f) => f.refEntity === 'flat') ? 'relFlat' : currentDef.fields.some((f) => f.refEntity === 'building') ? 'relBuilding' : 'mapping')}
+            onBack={() => setPhase(
+              currentDef.fields.some((f) => f.refEntity === 'resident') ? 'relResident'
+                : currentDef.fields.some((f) => f.refEntity === 'flat') ? 'relFlat'
+                : currentDef.fields.some((f) => f.refEntity === 'building') ? 'relBuilding' : 'mapping'
+            )}
             onImport={runImport}
             importing={busy}
           />
