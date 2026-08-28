@@ -44,6 +44,7 @@ export default function ImportWizard() {
   const [jobIndex, setJobIndex] = useState(0);
 
   const [mapping, setMapping] = useState<Record<string, number>>({});
+  const [manualValues, setManualValues] = useState<Record<string, string>>({});
   const [rows, setRows] = useState<ProcessedRow[]>([]);
   const [buildingDistinct, setBuildingDistinct] = useState<Map<string, RefResolution>>(new Map());
   const [flatDistinct, setFlatDistinct] = useState<Map<string, RefResolution>>(new Map());
@@ -66,6 +67,7 @@ export default function ImportWizard() {
     setJobs([]);
     setJobIndex(0);
     setMapping({});
+    setManualValues({});
     setRows([]);
     setOutcomes([]);
     setLastResult(null);
@@ -98,6 +100,7 @@ export default function ImportWizard() {
     const def = IMPORT_ENTITIES[job.entity];
     setJobIndex(index);
     setMapping(autoMapColumns(job.sheet.headers, def));
+    setManualValues({});
     setPhase('mapping');
   }
 
@@ -112,7 +115,7 @@ export default function ImportWizard() {
     if (!currentJob || !currentDef) return;
     setBusy(true);
     try {
-      const processed = buildProcessedRows(currentDef, currentJob.sheet.rows, mapping);
+      const processed = buildProcessedRows(currentDef, currentJob.sheet.rows, mapping, manualValues);
       const hasBuildingRef = currentDef.fields.some((f) => f.refEntity === 'building');
       if (hasBuildingRef) {
         const distinct = await resolveBuildingRefs(processed);
@@ -313,7 +316,9 @@ export default function ImportWizard() {
             headers={currentJob.sheet.headers}
             rows={currentJob.sheet.rows}
             mapping={mapping}
+            manualValues={manualValues}
             onChange={setMapping}
+            onManualValuesChange={setManualValues}
             onBack={() => setPhase('queue')}
             onNext={proceedFromMapping}
           />

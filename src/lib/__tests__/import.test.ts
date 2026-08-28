@@ -72,19 +72,19 @@ describe('buildProcessedRows - coercion & validation', () => {
   });
 
   it('defaults an unmapped enum field rather than erroring', () => {
-    const mapping = { buildingRef: -1, unitNo: 0, floor: -1, status: -1 };
+    const mapping = { buildingRef: -1, unitNo: 0, floor: -1, occupancyStatus: -1, lifecycleStatus: -1 };
     const rows = buildProcessedRows(FLATS_DEF, [['A-1']], mapping);
-    expect(rows[0].record.status).toBe('vacant');
+    expect(rows[0].record.occupancyStatus).toBe('vacant');
   });
 
   it('falls back to the default value for an unrecognized enum cell rather than erroring, when a default exists', () => {
-    const mapping = { buildingRef: -1, unitNo: 0, floor: -1, status: 1 };
+    const mapping = { buildingRef: -1, unitNo: 0, floor: -1, occupancyStatus: 1, lifecycleStatus: -1 };
     const rows = buildProcessedRows(FLATS_DEF, [['A-1', 'not-a-status']], mapping);
-    expect(rows[0].record.status).toBe('vacant');
+    expect(rows[0].record.occupancyStatus).toBe('vacant');
   });
 
   it('coerces boolean-like text for Yes/No fields', () => {
-    const mapping: Record<string, number> = { buildingRef: -1, flatRef: -1, name: 0, mobile: -1, email: -1, type: -1, status: -1, moveInDate: -1, moveOutDate: -1, isBillingContact: 1, idType: -1, idNumber: -1 };
+    const mapping: Record<string, number> = { buildingRef: -1, flatRef: -1, name: 0, mobile: -1, email: -1, type: -1, status: -1, moveInDate: -1, moveOutDate: -1, isBillingContact: 1, idType: -1, idNumber: -1, firstName: -1, lastName: -1 } as any;
     const rows = buildProcessedRows(RESIDENTS_DEF, [['Jane Doe', 'No']], mapping);
     expect(rows[0].record.isBillingContact).toBe(false);
   });
@@ -93,6 +93,33 @@ describe('buildProcessedRows - coercion & validation', () => {
     const mapping = { buildingRef: -1, flatRef: -1, category: 0, amount: 1, vendor: -1, date: 2, notes: -1 };
     const rows = buildProcessedRows(EXPENSES_DEF, [['Repairs & Maintenance', '150', 'not-a-date']], mapping);
     expect(rows[0].errors.some((e) => /Date/.test(e))).toBe(true);
+  });
+
+  it('uses a manual value for a required field with no matching column instead of erroring', () => {
+    const mapping = { name: -1, address: -1, totalFlats: -1 };
+    const rows = buildProcessedRows(BUILDINGS_DEF, [['ignored']], mapping, { name: 'Sunset Tower' });
+    expect(rows[0].errors).toEqual([]);
+    expect(rows[0].record.name).toBe('Sunset Tower');
+  });
+
+  it('applies the same manual value to every row', () => {
+    const mapping = { buildingRef: -1, unitNo: 0, floor: -1, occupancyStatus: -1, lifecycleStatus: -1, unitType: -1, bedrooms: -1, bathrooms: -1, sqft: -1, standardRent: -1, currency: -1, parkingIncluded: -1, storageIncluded: -1 };
+    const rows = buildProcessedRows(FLATS_DEF, [['A-1'], ['A-2'], ['A-3']], mapping, { storageIncluded: 'Yes' });
+    expect(rows.every((r) => r.record.storageIncluded === true)).toBe(true);
+  });
+
+  it('lets a manual value resolve a required relationship field too (e.g. every row is for the same building)', () => {
+    const mapping = { buildingRef: -1, unitNo: 0, floor: -1, occupancyStatus: -1, lifecycleStatus: -1, unitType: -1, bedrooms: -1, bathrooms: -1, sqft: -1, standardRent: -1, currency: -1, parkingIncluded: -1, storageIncluded: -1 };
+    const rows = buildProcessedRows(FLATS_DEF, [['A-1'], ['A-2']], mapping, { buildingRef: 'Sunset Tower' });
+    expect(rows[0].errors).toEqual([]);
+    expect(rows[0].refs.buildingRef.raw).toBe('Sunset Tower');
+    expect(rows[1].refs.buildingRef.raw).toBe('Sunset Tower');
+  });
+
+  it('prefers a mapped column over a stale manual value for the same field', () => {
+    const mapping = { name: 0, address: -1, totalFlats: -1 };
+    const rows = buildProcessedRows(BUILDINGS_DEF, [['Real Column Value']], mapping, { name: 'Should Be Ignored' });
+    expect(rows[0].record.name).toBe('Real Column Value');
   });
 });
 

@@ -89,11 +89,15 @@ function coerceValue(cell: any, field: ImportFieldDef): { value: any; error?: st
   }
 }
 
-/** Builds one ProcessedRow per data row: coerced values + validation errors. Relationship fields are left unresolved here - see resolveBuildingRefs/resolveFlatRefs, run once distinct values across the whole sheet are known. */
+/** Builds one ProcessedRow per data row: coerced values + validation errors. Relationship fields are left unresolved here - see resolveBuildingRefs/resolveFlatRefs, run once distinct values across the whole sheet are known.
+ *
+ * `manualValues` supplies a single fixed value (as if it were a cell) for any field the person chose not to map to a column - either because the sheet has no matching column at all (required field, or an optional-but-important one like "Storage Included" they still want to set explicitly), or because they'd rather apply one value to every row than add a column. Manual values are looked up ahead of the sheet column for a field.
+ */
 export function buildProcessedRows(
   def: ImportEntityDef,
   dataRows: any[][],
-  mapping: Record<string, number>
+  mapping: Record<string, number>,
+  manualValues?: Record<string, string>
 ): ProcessedRow[] {
   return dataRows.map((row, rowIndex) => {
     const raw: Record<string, any> = {};
@@ -103,7 +107,13 @@ export function buildProcessedRows(
 
     for (const field of def.fields) {
       const colIdx = mapping[field.key];
-      const cell = colIdx == null || colIdx < 0 ? '' : row[colIdx];
+      const hasColumn = colIdx != null && colIdx >= 0;
+      const manual = manualValues?.[field.key];
+      // A real mapped column always wins over a manual value, even if both
+      // happen to be set at once (the UI keeps them mutually exclusive, but
+      // the engine itself shouldn't rely on that - a genuine column of data
+      // is always more specific than a single fixed fallback value).
+      const cell = hasColumn ? row[colIdx] : (manual !== undefined && manual !== '' ? manual : '');
       raw[field.key] = cell;
 
       if (field.refEntity) {
