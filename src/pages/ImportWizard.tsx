@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
-  UploadCloud, FileSpreadsheet, Download, CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, Layers, RotateCcw,
+  UploadCloud, FileSpreadsheet, Download, CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, Layers, RotateCcw, Wand2,
 } from 'lucide-react';
 import { db } from '@/lib/db';
 import { parseImportFile, type ParsedWorkbook, type ParsedSheet } from '@/lib/import/parseFile';
@@ -56,6 +56,13 @@ export default function ImportWizard() {
   // sheet processed in this session (e.g. typing Currency = USD once for the
   // Flats sheet pre-fills it for Leases too, instead of asking again).
   const [manualMemory, setManualMemory] = useState<Record<string, string>>({});
+  // Full column mapping remembered per entity type, so a second (or third)
+  // tab mapped to the same entity - e.g. "Flats - Tower A" then "Flats -
+  // Tower B" - reuses the same header choices instead of re-mapping.
+  const [entityMappingMemory, setEntityMappingMemory] = useState<Partial<Record<ImportEntityKey, {
+    sourceSheet: string; mapping: Record<string, string>; manualValues: Record<string, string>;
+  }>>>({});
+  const [mappingReusedFrom, setMappingReusedFrom] = useState<string | null>(null);
   // Notes about relationship steps that were skipped automatically because
   // every reference already matched an existing record with no ambiguity.
   const [autoMatchNotes, setAutoMatchNotes] = useState<string[]>([]);
@@ -83,6 +90,8 @@ export default function ImportWizard() {
     setOutcomes([]);
     setLastResult(null);
     setManualMemory({});
+    setEntityMappingMemory({});
+    setMappingReusedFrom(null);
     setAutoMatchNotes([]);
   }
 
@@ -111,21 +120,52 @@ export default function ImportWizard() {
     const job = jobs[index];
     if (!job || !job.entity) return;
     const def = IMPORT_ENTITIES[job.entity];
-    const autoMapped = autoMapColumns(job.sheet.headers, def);
-    // Pre-fill manual values this session already answered for a same-named
-    // field on an earlier sheet (e.g. Currency, or a Building name applied
-    // to every row), but only where this sheet has no matching column of
-    // its own - a real column always wins.
-    const prefillManual: Record<string, string> = {};
-    for (const field of def.fields) {
-      const hasColumn = autoMapped[field.key] != null && autoMapped[field.key] >= 0;
-      if (!hasColumn && manualMemory[field.key]) prefillManual[field.key] = manualMemory[field.key];
+    const headers = job.sheet.headers;
+    const autoMapped = autoMapColumns(headers, def);
+
+    // If an earlier tab was already mapped to this same entity, reuse those
+    // exact header choices wherever this tab has a matching column name -
+    // covers the common "one tab per building/unit" file layout - and only
+    // fall back to fresh auto-detection for anything it doesn't cover.
+    const remembered = entityMappingMemory[job.entity];
+    let finalMapping = autoMapped;
+    let finalManual: Record<string, string> = {};
+    let reusedFrom: string | null = null;
+    if (remembered) {
+      const resolved: Record<string, number> = {};
+      for (const field of def.fields) {
+        const rememberedHeader = remembered.mapping[field.key];
+        if (!rememberedHeader) continue;
+        const idx = headers.findIndex((h) => normalizeHeader(h) === normalizeHeader(rememberedHeader));
+        if (idx >= 0) resolved[field.key] = idx;
+      }
+      if (Object.keys(resolved).length) {
+        finalMapping = { ...autoMapped, ...resolved };
+        finalManual = { ...remembered.manualValues };
+        reusedFrom = remembered.sourceSheet;
+      }
     }
+    // Manual "apply to every row" values remembered from any earlier sheet
+    // (any entity) fill in anything still missing a column, e.g. Currency.
+    for (const field of def.fields) {
+      const hasColumn = finalMapping[field.key] != null && finalMapping[field.key] >= 0;
+      if (!hasColumn && !finalManual[field.key] && manualMemory[field.key]) finalManual[field.key] = manualMemory[field.key];
+    }
+
     setJobIndex(index);
-    setMapping(autoMapped);
-    setManualValues(prefillManual);
+    setMapping(finalMapping);
+    setManualValues(finalManual);
+    setMappingReusedFrom(reusedFrom);
     setAutoMatchNotes([]);
     setPhase('mapping');
+  }
+
+  /** Discards the reused mapping for the current sheet and re-runs plain header-name auto-detection instead. */
+  function reapplyAutoDetect() {
+    if (!currentJob || !currentDef) return;
+    setMapping(autoMapColumns(currentJob.sheet.headers, currentDef));
+    setManualValues({});
+    setMappingReusedFrom(null);
   }
 
   function nextEligibleJobIndex(from: number): number {
@@ -141,6 +181,17 @@ export default function ImportWizard() {
     try {
       const nonEmptyManual = Object.fromEntries(Object.entries(manualValues).filter(([, v]) => v !== '' && v !== undefined));
       if (Object.keys(nonEmptyManual).length) setManualMemory((prev) => ({ ...prev, ...nonEmptyManual }));
+      const headerMapping: Record<string, string> = {};
+      for (const field of currentDef.fields) {
+        const idx = mapping[field.key];
+        if (idx != null && idx >= 0) headerMapping[field.key] = currentJob.sheet.headers[idx];
+      }
+      if (Object.keys(headerMapping).length) {
+        setEntityMappingMemory((prev) => ({
+          ...prev,
+          [currentJob.entity as ImportEntityKey]: { sourceSheet: currentJob.sheet.name, mapping: headerMapping, manualValues: nonEmptyManual },
+        }));
+      }
       const processed = buildProcessedRows(currentDef, currentJob.sheet.rows, mapping, manualValues);
       const hasBuildingRef = currentDef.fields.some((f) => f.refEntity === 'building');
       if (hasBuildingRef) {
@@ -337,6 +388,13 @@ export default function ImportWizard() {
       {phase === 'mapping' && currentJob && currentDef && (
         <div className="card p-6">
           <SheetProgress job={currentJob} outcomes={outcomes} jobs={jobs} />
+          {mappingReusedFrom && (
+            <div className="flex items-center gap-2 bg-brand-50 text-brand-700 text-xs rounded-xl p-3 mb-4">
+              <Wand2 size={14} className="shrink-0" />
+              <div className="flex-1">Columns mapped automatically, reused from "{mappingReusedFrom}" — check they still look right.</div>
+              <button className="text-brand-700 underline font-medium shrink-0" onClick={reapplyAutoDetect}>Re-detect instead</button>
+            </div>
+          )}
           <MappingStep
             def={currentDef}
             headers={currentJob.sheet.headers}
