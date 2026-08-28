@@ -52,6 +52,17 @@ export default function ImportWizard() {
   const [globalDecision, setGlobalDecision] = useState<DuplicateDecision>('skip');
   const [lastResult, setLastResult] = useState<SheetOutcome | null>(null);
   const [outcomes, setOutcomes] = useState<SheetOutcome[]>([]);
+  // Manual "apply to every row" values, remembered by field key across every
+  // sheet processed in this session (e.g. typing Currency = USD once for the
+  // Flats sheet pre-fills it for Leases too, instead of asking again).
+  const [manualMemory, setManualMemory] = useState<Record<string, string>>({});
+  // Notes about relationship steps that were skipped automatically because
+  // every reference already matched an existing record with no ambiguity.
+  const [autoMatchNotes, setAutoMatchNotes] = useState<string[]>([]);
+
+  function noteAutoResolved(count: number, fieldLabel: string) {
+    setAutoMatchNotes((prev) => [...prev, `${count} ${fieldLabel.toLowerCase()} reference${count > 1 ? 's' : ''} matched automatically`]);
+  }
 
   const allBuildings = useLiveQuery(() => db.buildings.toArray(), [phase]) ?? [];
   const allFlats = useLiveQuery(() => db.flats.toArray(), [phase]) ?? [];
@@ -71,6 +82,8 @@ export default function ImportWizard() {
     setRows([]);
     setOutcomes([]);
     setLastResult(null);
+    setManualMemory({});
+    setAutoMatchNotes([]);
   }
 
   // --- Step: upload ------------------------------------------------------
@@ -98,9 +111,20 @@ export default function ImportWizard() {
     const job = jobs[index];
     if (!job || !job.entity) return;
     const def = IMPORT_ENTITIES[job.entity];
+    const autoMapped = autoMapColumns(job.sheet.headers, def);
+    // Pre-fill manual values this session already answered for a same-named
+    // field on an earlier sheet (e.g. Currency, or a Building name applied
+    // to every row), but only where this sheet has no matching column of
+    // its own - a real column always wins.
+    const prefillManual: Record<string, string> = {};
+    for (const field of def.fields) {
+      const hasColumn = autoMapped[field.key] != null && autoMapped[field.key] >= 0;
+      if (!hasColumn && manualMemory[field.key]) prefillManual[field.key] = manualMemory[field.key];
+    }
     setJobIndex(index);
-    setMapping(autoMapColumns(job.sheet.headers, def));
-    setManualValues({});
+    setMapping(autoMapped);
+    setManualValues(prefillManual);
+    setAutoMatchNotes([]);
     setPhase('mapping');
   }
 
@@ -115,6 +139,8 @@ export default function ImportWizard() {
     if (!currentJob || !currentDef) return;
     setBusy(true);
     try {
+      const nonEmptyManual = Object.fromEntries(Object.entries(manualValues).filter(([, v]) => v !== '' && v !== undefined));
+      if (Object.keys(nonEmptyManual).length) setManualMemory((prev) => ({ ...prev, ...nonEmptyManual }));
       const processed = buildProcessedRows(currentDef, currentJob.sheet.rows, mapping, manualValues);
       const hasBuildingRef = currentDef.fields.some((f) => f.refEntity === 'building');
       if (hasBuildingRef) {
@@ -334,6 +360,7 @@ export default function ImportWizard() {
             getExistingOptions={() => allBuildings.map((b) => ({ id: b.id as number, label: b.name })).sort((a, b) => a.label.localeCompare(b.label))}
             onBack={() => setPhase('mapping')}
             onNext={proceedFromBuildingRels}
+            onAutoResolved={noteAutoResolved}
           />
         </div>
       )}
@@ -353,6 +380,7 @@ export default function ImportWizard() {
             }}
             onBack={() => setPhase('relBuilding')}
             onNext={proceedFromFlatRels}
+            onAutoResolved={noteAutoResolved}
           />
         </div>
       )}
@@ -367,6 +395,7 @@ export default function ImportWizard() {
             getExistingOptions={() => allResidents.map((r) => ({ id: r.id as number, label: r.name })).sort((a, b) => a.label.localeCompare(b.label))}
             onBack={() => setPhase(currentDef.fields.some((f) => f.refEntity === 'flat') ? 'relFlat' : currentDef.fields.some((f) => f.refEntity === 'building') ? 'relBuilding' : 'mapping')}
             onNext={proceedFromResidentRels}
+            onAutoResolved={noteAutoResolved}
           />
         </div>
       )}
@@ -374,6 +403,12 @@ export default function ImportWizard() {
       {phase === 'preview' && currentDef && (
         <div className="card p-6">
           <SheetProgress job={currentJob!} outcomes={outcomes} jobs={jobs} />
+          {autoMatchNotes.length > 0 && (
+            <div className="flex items-start gap-2 bg-emerald-50 text-emerald-700 text-xs rounded-xl p-3 mb-4">
+              <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+              <div>{autoMatchNotes.join(' · ')} - no review needed, so those steps were skipped.</div>
+            </div>
+          )}
           <PreviewStep
             def={currentDef}
             rows={rows}

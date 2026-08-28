@@ -5,7 +5,7 @@ import type { RefResolution } from '@/lib/import/engine';
 type Choice = { raw: string; choice: 'existing' | 'create' | 'unresolved'; matchedId?: number };
 
 export default function RelationshipStep({
-  fieldLabel, distinct, getExistingOptions, allowCreate = true, onBack, onNext,
+  fieldLabel, distinct, getExistingOptions, allowCreate = true, onBack, onNext, onAutoResolved,
 }: {
   fieldLabel: string; // "Building", "Unit", or "Resident"
   distinct: Map<string, RefResolution>; // key -> initial resolution (matched/unmatched)
@@ -13,6 +13,8 @@ export default function RelationshipStep({
   allowCreate?: boolean; // false for resident references - a resident needs too much required info to auto-create from a child-table import
   onBack: () => void;
   onNext: (resolutions: Map<string, RefResolution>) => void;
+  /** Called instead of rendering, when every distinct value already matches an existing record with no ambiguity - nothing here needs a human decision. */
+  onAutoResolved?: (count: number, fieldLabel: string) => void;
 }) {
   const [choices, setChoices] = useState<Record<string, Choice>>({});
 
@@ -26,6 +28,19 @@ export default function RelationshipStep({
     setChoices(initial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [distinct, allowCreate]);
+
+  // If the sheet only ever references buildings/units/residents that already
+  // exist and match unambiguously (already true whenever this same sheet's
+  // relationships were resolved on an earlier sheet in this session), there
+  // is nothing for a person to decide - skip straight through instead of
+  // asking them to re-confirm data they've already confirmed.
+  useEffect(() => {
+    if (distinct.size === 0) return; // handled by the empty-state below
+    const allCleanlyMatched = Array.from(distinct.values()).every((r) => r.status === 'matched');
+    if (allCleanlyMatched) onAutoResolved?.(distinct.size, fieldLabel);
+    if (allCleanlyMatched) onNext(new Map(distinct));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [distinct]);
 
   const entries = useMemo(() => Array.from(distinct.entries()), [distinct]);
   const unresolvedCount = entries.filter(([key]) => choices[key]?.choice === 'unresolved').length;
