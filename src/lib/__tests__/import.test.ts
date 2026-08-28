@@ -49,6 +49,45 @@ describe('autoMapColumns', () => {
     const used = Object.values(mapping).filter((v) => v >= 0);
     expect(new Set(used).size).toBe(used.length);
   });
+
+  it('matches reworded/synonym headers a differently-styled tab might use', () => {
+    // A tab titled with wording nobody hand-wrote an alias for verbatim -
+    // exercises word-overlap + synonym matching, not just alias lookup.
+    const headers = ['Tenant Full Name', 'Cell Phone', 'Email Address', 'Move-In Date'];
+    const mapping = autoMapColumns(headers, RESIDENTS_DEF);
+    expect(mapping.name).toBe(0);
+    expect(mapping.mobile).toBe(1);
+    expect(mapping.email).toBe(2);
+    expect(mapping.moveInDate).toBe(3);
+  });
+
+  it('matches headers with extra connector words and reordered words', () => {
+    const headers = ['Name of Building', 'Total Number of Units'];
+    const mapping = autoMapColumns(headers, BUILDINGS_DEF);
+    expect(mapping.name).toBe(0);
+    expect(mapping.totalFlats).toBe(1);
+  });
+
+  it('tolerates small typos in headers', () => {
+    const headers = ['Buildng Name', 'Adress'];
+    const mapping = autoMapColumns(headers, BUILDINGS_DEF);
+    expect(mapping.name).toBe(0);
+    expect(mapping.address).toBe(1);
+  });
+
+  it('matches a rent-amount-style header to the right numeric field without false-matching currency', () => {
+    const headers = ['Monthly Rental Amount', 'Currency Code'];
+    const mapping = autoMapColumns(headers, FLATS_DEF);
+    expect(mapping.standardRent).toBe(0);
+    expect(mapping.currency).toBe(1);
+  });
+
+  it('does not force a wrong match for a truly unrelated column', () => {
+    const headers = ['Notes', 'Random Internal Code'];
+    const mapping = autoMapColumns(headers, BUILDINGS_DEF);
+    expect(mapping.name).toBe(-1);
+    expect(mapping.address).toBe(-1);
+  });
 });
 
 describe('buildProcessedRows - coercion & validation', () => {
