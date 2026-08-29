@@ -15,6 +15,7 @@ import {
 } from '@/lib/import/engine';
 import { downloadCsvTemplate, downloadErrorReport } from '@/lib/import/csvExport';
 import MappingStep from '@/components/import/MappingStep';
+import type { OtherSheetInfo } from '@/components/import/ColumnPicker';
 import RelationshipStep from '@/components/import/RelationshipStep';
 import PreviewStep from '@/components/import/PreviewStep';
 
@@ -115,6 +116,24 @@ export default function ImportWizard() {
   }
 
   // --- Step: sheet queue ---------------------------------------------------
+
+  /** Every other tab in the workbook, as far as the ColumnPicker's cross-tab search needs to know - its own header list and, if it's already assigned an entity, that entity's label (so a search hit there can offer "Go to tab"). */
+  function otherSheetsForJob(index: number): OtherSheetInfo[] {
+    return jobs
+      .map((j, i) => ({ j, i }))
+      .filter(({ i }) => i !== index)
+      .map(({ j, i }) => ({
+        jobIndex: i,
+        sheetName: j.sheet.name,
+        entityLabel: j.entity ? IMPORT_ENTITIES[j.entity].label : null,
+        headers: j.sheet.headers,
+      }));
+  }
+
+  /** Jumps straight to mapping a different tab, from a "Go to tab" hit in the column search - used when a column the user is looking for actually lives on another sheet. */
+  function jumpToSheet(index: number) {
+    startJob(index);
+  }
 
   function startJob(index: number) {
     const job = jobs[index];
@@ -405,6 +424,8 @@ export default function ImportWizard() {
             onManualValuesChange={setManualValues}
             onBack={() => setPhase('queue')}
             onNext={proceedFromMapping}
+            otherSheets={otherSheetsForJob(jobIndex)}
+            onJumpToSheet={jumpToSheet}
           />
         </div>
       )}

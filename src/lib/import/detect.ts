@@ -2,6 +2,10 @@ import { normalizeHeader, type ImportEntityDef } from './schemas';
 
 export type DetectedColumnType = 'number' | 'date' | 'boolean' | 'string';
 
+export const COLUMN_TYPE_LABEL: Record<DetectedColumnType, string> = {
+  string: 'Text', number: 'Number', date: 'Date', boolean: 'Yes/No',
+};
+
 const BOOL_RE = /^(true|false|yes|no|y|n)$/i;
 
 // Requires an actual date-like separator or a month name - a bare number

@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Save, Trash2, Wand2, ArrowRight, ArrowLeft, PencilLine, X } from 'lucide-react';
 import type { ImportEntityDef, ImportFieldDef } from '@/lib/import/schemas';
-import { detectColumnType, type DetectedColumnType } from '@/lib/import/detect';
+import { detectColumnType } from '@/lib/import/detect';
 import { listImportTemplates, saveImportTemplate, deleteImportTemplate } from '@/lib/import/templates';
 import type { ImportTemplate } from '@/types';
-
-const TYPE_LABEL: Record<DetectedColumnType, string> = {
-  string: 'Text', number: 'Number', date: 'Date', boolean: 'Yes/No',
-};
+import ColumnPicker, { type OtherSheetInfo } from './ColumnPicker';
 
 /** A single control for entering the manual/fixed value for one field, matching its type - a Yes/No select for booleans, a dropdown for enums, a date picker for dates, etc. - so a non-technical person never has to guess the right format. */
 function ManualValueInput({ field, value, onChange }: { field: ImportFieldDef; value: string; onChange: (v: string) => void }) {
@@ -38,7 +35,7 @@ function ManualValueInput({ field, value, onChange }: { field: ImportFieldDef; v
 }
 
 export default function MappingStep({
-  def, headers, rows, mapping, manualValues, onChange, onManualValuesChange, onBack, onNext,
+  def, headers, rows, mapping, manualValues, onChange, onManualValuesChange, onBack, onNext, otherSheets, onJumpToSheet,
 }: {
   def: ImportEntityDef;
   headers: string[];
@@ -49,6 +46,10 @@ export default function MappingStep({
   onManualValuesChange: (m: Record<string, string>) => void;
   onBack: () => void;
   onNext: () => void;
+  /** Every other tab in this workbook, so the column search can look there too when this sheet doesn't have the answer. */
+  otherSheets?: OtherSheetInfo[];
+  /** Jumps the wizard straight to mapping a different tab (used by the "Go to tab" search result). */
+  onJumpToSheet?: (jobIndex: number) => void;
 }) {
   const [templates, setTemplates] = useState<ImportTemplate[]>([]);
   const [saveName, setSaveName] = useState('');
@@ -187,18 +188,15 @@ export default function MappingStep({
 
                 {!manualOpen ? (
                   <>
-                    <select
-                      className="input sm:flex-1"
-                      value={mapped ? idx : ''}
-                      onChange={(e) => setField(field.key, e.target.value === '' ? -1 : Number(e.target.value))}
-                    >
-                      <option value="">— Not in this file —</option>
-                      {headers.map((h, i) => (
-                        <option key={i} value={i} disabled={usedCols.has(i) && mapping[field.key] !== i}>
-                          {h}{columnTypes[i] ? ` (${TYPE_LABEL[columnTypes[i]]})` : ''}
-                        </option>
-                      ))}
-                    </select>
+                    <ColumnPicker
+                      headers={headers}
+                      columnTypes={columnTypes}
+                      usedCols={usedCols}
+                      currentIdx={mapped ? idx : -1}
+                      otherSheets={otherSheets ?? []}
+                      onSelect={(i) => setField(field.key, i)}
+                      onJumpToSheet={onJumpToSheet}
+                    />
                     {!mapped && (
                       <button
                         className="flex items-center gap-1 text-xs text-brand-600 font-medium whitespace-nowrap sm:w-40 shrink-0"
