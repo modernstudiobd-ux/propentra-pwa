@@ -218,6 +218,35 @@ export class PropentraDB extends Dexie {
           if (d.linkType === 'flat' && d.linkId) d.flatId = d.linkId;
         });
       });
+
+    // v7: adds an indexed `externalId` column to buildings/flats/residents -
+    // lets the Import Wizard resolve cross-sheet references in a workbook
+    // that links tabs by a surrogate ID (e.g. "Property ID"/"Unit ID"/
+    // "Person ID") rather than by name. Purely additive/optional - no
+    // upgrade() needed, existing records simply have no externalId until
+    // something is imported with one.
+    this.version(7).stores({
+      buildings: '++id, name, externalId',
+      flats: '++id, buildingId, unitNo, occupancyStatus, lifecycleStatus, externalId',
+      residents: '++id, name, buildingId, flatId, type, status, externalId',
+      bills: '++id, invoiceNo, buildingId, flatId, residentId, status, billingMonth',
+      receipts: '++id, receiptNo, invoiceId, residentId, voided',
+      payments: '++id, invoiceId, residentId, date, voided, tenancyId',
+      settings: '++id',
+      depositTransactions: '++id, residentId, buildingId, flatId, type, date',
+      maintenanceRequests: '++id, buildingId, flatId, status, priority, reportedDate',
+      expenses: '++id, buildingId, flatId, category, date',
+      reminders: '++id, dueDate, status, priority, linkType, linkId',
+      documents: '++id, linkType, linkId, buildingId, flatId, residentId, category, expiryDate',
+      auditLog: '++id, entityType, entityId, action, timestamp, residentId',
+      importTemplates: '++id, entity',
+      tenancies: '++id, residentId, flatId, buildingId, occupancyStatus, leaseEnd',
+      ownerships: '++id, residentId, flatId, buildingId, status',
+      contacts: '++id, residentId, type',
+      emergencyContacts: '++id, residentId, isPrimary',
+      vehicles: '++id, residentId, flatId, buildingId, plate, status',
+      parkingSpaces: '++id, buildingId, flatId, residentId, status',
+    });
   }
 }
 

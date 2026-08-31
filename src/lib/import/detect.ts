@@ -121,39 +121,53 @@ const MATCH_THRESHOLD = 0.55;
 
 /**
  * Best-effort mapping from target fields to source column indices. Tries
- * every field's key/label/aliases against every unused header and picks the
- * strongest match above MATCH_THRESHOLD, using synonym-aware word overlap
- * and typo tolerance rather than requiring an exact or substring match -
- * this is what lets differently-worded tabs (e.g. "Tenant Name" vs
- * "Resident Full Name" vs "Occupant") all auto-map correctly. Returns -1
- * for any field that couldn't be confidently auto-mapped.
+ * every field's key/label/aliases against every header, using synonym-aware
+ * word overlap and typo tolerance rather than requiring an exact or
+ * substring match - this is what lets differently-worded tabs (e.g. "Tenant
+ * Name" vs "Resident Full Name" vs "Occupant") all auto-map correctly.
+ *
+ * Matches are resolved globally rather than one field at a time: every
+ * (field, header) pair scoring at or above MATCH_THRESHOLD is collected
+ * first, then claimed in descending order of confidence. This matters once
+ * a schema has several similarly-named fields (e.g. First/Last/Full Name) -
+ * a field earlier in the definition list should never grab a header via a
+ * weak, coincidental match (like a short alias substring) when a later
+ * field is actually the strong, correct match for that same header.
+ * Returns -1 for any field that couldn't be confidently auto-mapped.
  */
 export function autoMapColumns(headers: string[], def: ImportEntityDef): Record<string, number> {
   const normHeaders = headers.map(normalizeHeader);
   const tokenizedHeaders = headers.map(tokenize);
-  const used = new Set<number>();
-  const mapping: Record<string, number> = {};
 
-  for (const field of def.fields) {
+  const candidateMatches: { fieldIdx: number; headerIdx: number; score: number }[] = [];
+  def.fields.forEach((field, fieldIdx) => {
     const candidates = [field.key, field.label, ...field.aliases];
-    let bestIdx = -1;
-    let bestScore = 0;
     for (let i = 0; i < headers.length; i++) {
-      if (used.has(i) || !normHeaders[i]) continue;
+      if (!normHeaders[i]) continue;
+      let best = 0;
       for (const cand of candidates) {
         const score = headerMatchScore(normHeaders[i], tokenizedHeaders[i], cand);
-        if (score > bestScore) {
-          bestScore = score;
-          bestIdx = i;
-        }
+        if (score > best) best = score;
       }
+      if (best >= MATCH_THRESHOLD) candidateMatches.push({ fieldIdx, headerIdx: i, score: best });
     }
-    if (bestScore >= MATCH_THRESHOLD) {
-      used.add(bestIdx);
-      mapping[field.key] = bestIdx;
-    } else {
-      mapping[field.key] = -1;
-    }
+  });
+  // Highest-confidence pairs are claimed first; ties keep the field that
+  // appears earlier in the schema (stable sort preserves push order above,
+  // which already follows def.fields order).
+  candidateMatches.sort((a, b) => b.score - a.score);
+
+  const usedHeaders = new Set<number>();
+  const usedFields = new Set<number>();
+  const mapping: Record<string, number> = {};
+  for (const field of def.fields) mapping[field.key] = -1;
+
+  for (const { fieldIdx, headerIdx, score } of candidateMatches) {
+    if (usedFields.has(fieldIdx) || usedHeaders.has(headerIdx)) continue;
+    void score;
+    usedFields.add(fieldIdx);
+    usedHeaders.add(headerIdx);
+    mapping[def.fields[fieldIdx].key] = headerIdx;
   }
   return mapping;
 }

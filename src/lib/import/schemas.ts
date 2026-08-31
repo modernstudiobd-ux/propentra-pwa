@@ -40,10 +40,28 @@ export const BUILDINGS_DEF: ImportEntityDef = {
       aliases: ['name', 'building', 'buildingname', 'property', 'propertyname', 'buildingtitle', 'site', 'estate', 'complex', 'block', 'buildingno', 'projectname'], example: 'Sunset Tower' },
     { key: 'address', label: 'Address', type: 'string', required: false,
       aliases: ['address', 'location', 'addr', 'streetaddress', 'fulladdress', 'propertyaddress', 'buildingaddress', 'postaladdress', 'street', 'addressline1'], example: '123 Main St' },
+    { key: 'addressLine2', label: 'Address Line 2', type: 'string', required: false,
+      aliases: ['addressline2', 'address2', 'suite', 'buildingaddress2'], example: '' },
+    { key: 'locality', label: 'City', type: 'string', required: false,
+      aliases: ['city', 'locality', 'town', 'municipality'], example: 'Springfield' },
+    { key: 'adminArea', label: 'State/Province', type: 'string', required: false,
+      aliases: ['state', 'province', 'stateprovince', 'region', 'adminarea'], example: 'IL' },
+    { key: 'postalCode', label: 'ZIP/Postal Code', type: 'string', required: false,
+      aliases: ['zip', 'zipcode', 'postalcode', 'postcode', 'zippostalcode'], example: '62704' },
+    { key: 'countryCode', label: 'Country', type: 'string', required: false,
+      aliases: ['country', 'countrycode', 'nation'], example: 'US' },
+    { key: 'propertyType', label: 'Property Type', type: 'string', required: false,
+      aliases: ['propertytype', 'buildingtype'], example: 'Apartment Building' },
+    { key: 'status', label: 'Building Status', type: 'enum', required: false, enumValues: ['active', 'inactive', 'under_construction'], defaultValue: 'active',
+      aliases: ['buildingstatus', 'status'], example: 'active' },
     { key: 'totalFlats', label: 'Total Flats', type: 'number', required: false, defaultValue: 0,
       aliases: ['totalflats', 'units', 'unitcount', 'numberofunits', 'totalunits', 'noofunits', 'numunits', 'totalapartments', 'unittotal', 'apartmentcount'], example: '24' },
+    { key: 'externalId', label: 'Source ID (optional)', type: 'string', required: false,
+      aliases: ['propertyid', 'buildingid', 'sourceid', 'externalid', 'recordid'], example: '' },
   ],
-  matchKeyGroups: [['name']],
+  // Matching by the file's own ID column (when present) is far more
+  // reliable than matching by name, so it's tried first.
+  matchKeyGroups: [['externalId'], ['name']],
 };
 
 export const FLATS_DEF: ImportEntityDef = {
@@ -52,9 +70,9 @@ export const FLATS_DEF: ImportEntityDef = {
   description: 'One row per flat/unit. The building is matched by name.',
   fields: [
     { key: 'buildingRef', label: 'Building Name', type: 'string', required: true, refEntity: 'building',
-      aliases: ['building', 'buildingname', 'property', 'propertyname', 'site', 'estate', 'block', 'buildingtitle'], example: 'Sunset Tower' },
+      aliases: ['buildingname', 'propertyname', 'buildingtitle', 'propertyid', 'buildingid'], example: 'Sunset Tower' },
     { key: 'unitNo', label: 'Unit No.', type: 'string', required: true,
-      aliases: ['unitno', 'unit', 'unitnumber', 'flat', 'flatno', 'apt', 'apartment', 'aptno', 'suite', 'suiteno', 'door', 'doorno', 'housenumber', 'roomno', 'unitid', 'flatid', 'unitref'], example: 'A-3' },
+      aliases: ['unitno', 'unit', 'unitnumber', 'flat', 'flatno', 'apt', 'apartment', 'aptno', 'suite', 'suiteno', 'door', 'doorno', 'housenumber', 'roomno', 'unitref'], example: 'A-3' },
     { key: 'floor', label: 'Floor', type: 'string', required: false,
       aliases: ['floor', 'level', 'flr', 'floorno', 'floorlevel', 'storey', 'story'], example: '3' },
     { key: 'occupancyStatus', label: 'Occupancy Status', type: 'enum', required: false, enumValues: ['occupied', 'vacant'], defaultValue: 'vacant',
@@ -70,43 +88,86 @@ export const FLATS_DEF: ImportEntityDef = {
     { key: 'currency', label: 'Currency', type: 'string', required: false, defaultValue: 'USD', aliases: ['currency', 'curr', 'ccy', 'currencycode'], example: 'USD' },
     { key: 'parkingIncluded', label: 'Parking Included', type: 'boolean', required: false, defaultValue: false, aliases: ['parkingincluded', 'parking', 'hasparking', 'parkingavailable', 'includesparking'], example: 'No' },
     { key: 'storageIncluded', label: 'Storage Included', type: 'boolean', required: false, defaultValue: false, aliases: ['storageincluded', 'storage', 'hasstorage', 'storageavailable', 'includesstorage'], example: 'No' },
+    { key: 'externalId', label: 'Source ID (optional)', type: 'string', required: false,
+      aliases: ['unitid', 'sourceid', 'externalid', 'recordid'], example: '' },
   ],
-  matchKeyGroups: [['buildingId', 'unitNo']],
+  matchKeyGroups: [['externalId'], ['buildingId', 'unitNo']],
 };
 
 export const RESIDENTS_DEF: ImportEntityDef = {
   key: 'residents',
   label: 'Residents',
-  description: 'One row per resident (tenant or owner). Building & flat are matched by name/unit.',
+  description: 'One row per resident (tenant or owner). Building & flat are matched by name/unit - leave them unmapped if a separate Tenancy/Ownership sheet in the same file already states each person\'s unit.',
   fields: [
-    { key: 'buildingRef', label: 'Building Name', type: 'string', required: true, refEntity: 'building',
-      aliases: ['building', 'buildingname', 'property', 'propertyname', 'site', 'estate', 'block', 'buildingtitle'], example: 'Sunset Tower' },
-    { key: 'flatRef', label: 'Unit No.', type: 'string', required: true, refEntity: 'flat',
+    { key: 'buildingRef', label: 'Building Name (optional)', type: 'string', required: false, refEntity: 'building',
+      aliases: ['buildingname', 'propertyname', 'buildingtitle', 'propertyid', 'buildingid'], example: 'Sunset Tower' },
+    { key: 'flatRef', label: 'Unit No. (optional)', type: 'string', required: false, refEntity: 'flat',
       aliases: ['unitno', 'unit', 'flat', 'flatno', 'apt', 'apartment', 'aptno', 'suite', 'suiteno', 'door', 'doorno', 'unitref'], example: 'A-3' },
+    { key: 'firstName', label: 'First Name', type: 'string', required: false,
+      aliases: ['firstname', 'fname', 'givenname'], example: 'Jane' },
+    { key: 'middleName', label: 'Middle Name', type: 'string', required: false,
+      aliases: ['middlename', 'mname'], example: '' },
+    { key: 'lastName', label: 'Last Name', type: 'string', required: false,
+      aliases: ['lastname', 'lname', 'surname', 'familyname'], example: 'Doe' },
+    { key: 'preferredName', label: 'Preferred Name', type: 'string', required: false,
+      aliases: ['preferredname', 'nickname', 'goesby'], example: '' },
+    // If this isn't mapped to its own column, it's automatically composed
+    // from First/Middle/Last Name below - see buildProcessedRows in engine.ts.
     { key: 'name', label: 'Resident Name', type: 'string', required: true,
       aliases: ['name', 'residentname', 'tenantname', 'fullname', 'occupantname', 'residentfullname', 'firstlastname', 'fullnamename', 'tenant'], example: 'Jane Doe' },
+    { key: 'companyName', label: 'Company Name', type: 'string', required: false,
+      aliases: ['companyname', 'organization', 'businessname', 'corporatename'], example: '' },
     { key: 'mobile', label: 'Mobile', type: 'string', required: false,
       aliases: ['mobile', 'phone', 'phonenumber', 'cell', 'contactnumber', 'tel', 'telephone', 'mobilenumber', 'cellphone', 'contact', 'phoneno', 'contactno', 'cellnumber'], example: '+1 555 0100' },
+    { key: 'altPhone', label: 'Alternate Phone', type: 'string', required: false,
+      aliases: ['alternatephone', 'altphone', 'secondaryphone', 'otherphone'], example: '' },
     { key: 'email', label: 'Email', type: 'string', required: false,
       aliases: ['email', 'emailaddress', 'emailid', 'mail', 'mailaddress', 'e-mail'], example: 'jane@example.com' },
+    { key: 'preferredContactMethod', label: 'Preferred Contact Method', type: 'enum', required: false, enumValues: ['Mobile', 'Email', 'WhatsApp', 'Mail'],
+      aliases: ['preferredcontactmethod', 'contactmethod', 'preferredcontact'], example: 'Email' },
+    // Fields with a specific, exact-matching header name are listed ahead of
+    // the generic Type/Status fields below - both of those also match any
+    // header merely containing the word "status" via word-overlap, so a
+    // more specific field (e.g. "Consent Status") must claim its header
+    // first or the generic field would grab it by mistake.
+    { key: 'dob', label: 'Date of Birth', type: 'date', required: false,
+      aliases: ['dateofbirth', 'dob', 'birthdate'], example: '' },
+    { key: 'nationality', label: 'Nationality', type: 'string', required: false,
+      aliases: ['nationality', 'citizenship'], example: '' },
+    { key: 'language', label: 'Preferred Language', type: 'string', required: false,
+      aliases: ['preferredlanguage', 'language'], example: '' },
+    { key: 'idType', label: 'ID Type', type: 'string', required: false,
+      aliases: ['idtype', 'identificationtype', 'documenttype', 'idkind'], example: 'Passport' },
+    { key: 'idNumber', label: 'ID Number', type: 'string', required: false,
+      aliases: ['idnumber', 'id', 'nationalid', 'ssn', 'passportnumber', 'idno', 'governmentid', 'identificationnumber', 'nid'], example: 'X1234567' },
+    { key: 'taxLegalName', label: 'Tax/Legal Name', type: 'string', required: false,
+      aliases: ['taxlegalname', 'legalname'], example: '' },
+    { key: 'taxIdType', label: 'Tax ID Type', type: 'string', required: false,
+      aliases: ['taxidtype'], example: '' },
+    { key: 'taxIdLast4', label: 'Tax ID Last 4', type: 'string', required: false,
+      aliases: ['taxidlast4', 'taxidlastfour'], example: '' },
+    { key: 'consentStatus', label: 'Consent Status', type: 'enum', required: false, enumValues: ['granted', 'declined', 'not_asked'],
+      aliases: ['consentstatus', 'dataconsentstatus'], example: 'granted' },
+    { key: 'marketingConsent', label: 'Marketing Consent', type: 'boolean', required: false,
+      aliases: ['marketingconsent'], example: 'No' },
+    { key: 'dataProcessingConsent', label: 'Data Processing Consent', type: 'boolean', required: false,
+      aliases: ['dataprocessingconsent'], example: '' },
     { key: 'type', label: 'Type', type: 'enum', required: false, enumValues: ['Tenant', 'Owner'], defaultValue: 'Tenant',
-      aliases: ['type', 'residenttype', 'occupanttype', 'category'], example: 'Tenant' },
+      aliases: ['type', 'residenttype', 'persontype', 'occupanttype', 'category'], example: 'Tenant' },
     { key: 'status', label: 'Status', type: 'enum', required: false, enumValues: ['current', 'former'], defaultValue: 'current',
-      aliases: ['status', 'residentstatus', 'occupancystatus', 'currentstatus'], example: 'current' },
+      aliases: ['status', 'residentstatus', 'currentstatus', 'occupancystatus'], example: 'current' },
     { key: 'moveInDate', label: 'Move-In Date', type: 'date', required: false,
       aliases: ['moveindate', 'movein', 'startdate', 'movedate', 'occupancydate', 'movinginto', 'movingdate'], example: '2024-01-15' },
     { key: 'moveOutDate', label: 'Move-Out Date', type: 'date', required: false,
       aliases: ['moveoutdate', 'moveout', 'enddate', 'vacatedate', 'departuredate', 'movingout'], example: '' },
     { key: 'isBillingContact', label: 'Billing Contact', type: 'boolean', required: false, defaultValue: true,
       aliases: ['billingcontact', 'isbillingcontact', 'primarycontact', 'mainbillingcontact', 'billto'], example: 'Yes' },
-    { key: 'idType', label: 'ID Type', type: 'string', required: false,
-      aliases: ['idtype', 'identificationtype', 'documenttype', 'idkind'], example: 'Passport' },
-    { key: 'idNumber', label: 'ID Number', type: 'string', required: false,
-      aliases: ['idnumber', 'id', 'nationalid', 'ssn', 'passportnumber', 'idno', 'governmentid', 'identificationnumber', 'nid'], example: 'X1234567' },
+    { key: 'externalId', label: 'Source ID (optional)', type: 'string', required: false,
+      aliases: ['personid', 'residentid', 'sourceid', 'externalid', 'recordid'], example: '' },
   ],
-  // Prefer matching by ID number when the sheet has one (most reliable);
-  // otherwise fall back to building + flat + name.
-  matchKeyGroups: [['idNumber'], ['buildingId', 'flatId', 'name']],
+  // Prefer matching by the file's own ID column, then ID number, then
+  // falling back to building + flat + name.
+  matchKeyGroups: [['externalId'], ['idNumber'], ['buildingId', 'flatId', 'name']],
 };
 
 export const EXPENSES_DEF: ImportEntityDef = {
@@ -115,7 +176,7 @@ export const EXPENSES_DEF: ImportEntityDef = {
   description: 'One row per expense transaction. Building is matched by name.',
   fields: [
     { key: 'buildingRef', label: 'Building Name', type: 'string', required: true, refEntity: 'building',
-      aliases: ['building', 'buildingname', 'property', 'propertyname', 'site', 'estate', 'block', 'buildingtitle'], example: 'Sunset Tower' },
+      aliases: ['buildingname', 'propertyname', 'buildingtitle', 'propertyid', 'buildingid'], example: 'Sunset Tower' },
     { key: 'flatRef', label: 'Unit No. (optional)', type: 'string', required: false, refEntity: 'flat',
       aliases: ['unitno', 'unit', 'flat', 'flatno', 'apt', 'apartment', 'unitref'], example: '' },
     { key: 'category', label: 'Category', type: 'string', required: true,
@@ -138,10 +199,14 @@ export const EXPENSES_DEF: ImportEntityDef = {
 export const TENANCIES_DEF: ImportEntityDef = {
   key: 'tenancies',
   label: 'Tenancies',
-  description: 'One row per lease. The resident is matched by full name - their building/flat come from that resident record.',
+  description: 'One row per lease. The resident is matched by name or ID. Building/Unit are optional - map them if the sheet has its own Property/Unit ID columns, otherwise they\'re taken from the matched resident\'s record.',
   fields: [
     { key: 'residentRef', label: 'Resident Name', type: 'string', required: true, refEntity: 'resident',
-      aliases: ['resident', 'residentname', 'tenant', 'tenantname', 'name', 'fullname', 'leaseholder', 'occupant', 'tenantfullname'], example: 'Jane Doe' },
+      aliases: ['resident', 'residentname', 'tenant', 'tenantname', 'name', 'fullname', 'leaseholder', 'occupant', 'tenantfullname', 'personid', 'residentid'], example: 'Jane Doe' },
+    { key: 'buildingRef', label: 'Building (optional)', type: 'string', required: false, refEntity: 'building',
+      aliases: ['propertyid', 'buildingid', 'buildingname', 'propertyname'], example: '' },
+    { key: 'flatRef', label: 'Unit (optional)', type: 'string', required: false, refEntity: 'flat',
+      aliases: ['unitid', 'unitno', 'unit', 'flat', 'flatno', 'apt', 'apartment'], example: '' },
     { key: 'leaseType', label: 'Lease Type', type: 'enum', required: false, enumValues: ['Fixed Term', 'Month-to-Month', 'Short-Term'], defaultValue: 'Fixed Term',
       aliases: ['leasetype', 'type', 'tenancytype', 'contracttype', 'agreementtype'], example: 'Fixed Term' },
     { key: 'leaseStart', label: 'Lease Start', type: 'date', required: true, aliases: ['leasestart', 'startdate', 'tenancystart', 'leasebegin', 'contractstart', 'leasestartdate'], example: '2024-01-01' },
@@ -162,10 +227,14 @@ export const TENANCIES_DEF: ImportEntityDef = {
 export const OWNERSHIPS_DEF: ImportEntityDef = {
   key: 'ownerships',
   label: 'Ownerships',
-  description: 'One row per owner record. The resident is matched by full name - their building/flat come from that resident record.',
+  description: 'One row per owner record. The resident is matched by name or ID. Building/Unit are optional - map them if the sheet has its own Property/Unit ID columns, otherwise they\'re taken from the matched resident\'s record.',
   fields: [
     { key: 'residentRef', label: 'Owner Name', type: 'string', required: true, refEntity: 'resident',
-      aliases: ['resident', 'owner', 'ownername', 'name', 'fullname', 'ownerfullname', 'proprietor'], example: 'Jane Doe' },
+      aliases: ['resident', 'owner', 'ownername', 'name', 'fullname', 'ownerfullname', 'proprietor', 'personid', 'residentid', 'ownerid'], example: 'Jane Doe' },
+    { key: 'buildingRef', label: 'Building (optional)', type: 'string', required: false, refEntity: 'building',
+      aliases: ['propertyid', 'buildingid', 'buildingname', 'propertyname'], example: '' },
+    { key: 'flatRef', label: 'Unit (optional)', type: 'string', required: false, refEntity: 'flat',
+      aliases: ['unitid', 'unitno', 'unit', 'flat', 'flatno', 'apt', 'apartment'], example: '' },
     { key: 'status', label: 'Status', type: 'enum', required: false, enumValues: ['active', 'former'], defaultValue: 'active',
       aliases: ['status', 'ownershipstatus'], example: 'active' },
     { key: 'ownershipPct', label: 'Ownership %', type: 'number', required: true, aliases: ['ownershippct', 'percentage', 'share', 'ownershippercentage', 'stake', 'shareholding', 'equity'], example: '100' },
@@ -182,7 +251,7 @@ export const CONTACTS_DEF: ImportEntityDef = {
   description: 'One row per secondary contact for a resident. The resident is matched by full name.',
   fields: [
     { key: 'residentRef', label: 'Resident Name', type: 'string', required: true, refEntity: 'resident',
-      aliases: ['resident', 'residentname', 'tenant', 'tenantname', 'fullname', 'associatedresident'], example: 'Jane Doe' },
+      aliases: ['resident', 'residentname', 'tenant', 'tenantname', 'fullname', 'associatedresident', 'personid', 'residentid'], example: 'Jane Doe' },
     { key: 'type', label: 'Contact Type', type: 'enum', required: false, enumValues: ['Personal', 'Business', 'Guarantor', 'Agent', 'Other'], defaultValue: 'Personal',
       aliases: ['type', 'contacttype', 'category', 'contactcategory'], example: 'Personal' },
     { key: 'name', label: 'Contact Name', type: 'string', required: true, aliases: ['name', 'contactname', 'fullname', 'contactfullname', 'personname'], example: 'John Doe' },
@@ -200,7 +269,7 @@ export const EMERGENCY_CONTACTS_DEF: ImportEntityDef = {
   description: 'One row per emergency contact for a resident. The resident is matched by full name.',
   fields: [
     { key: 'residentRef', label: 'Resident Name', type: 'string', required: true, refEntity: 'resident',
-      aliases: ['resident', 'residentname', 'tenant', 'tenantname', 'fullname', 'associatedresident'], example: 'Jane Doe' },
+      aliases: ['resident', 'residentname', 'tenant', 'tenantname', 'fullname', 'associatedresident', 'personid', 'residentid'], example: 'Jane Doe' },
     { key: 'name', label: 'Contact Name', type: 'string', required: true, aliases: ['name', 'contactname', 'fullname', 'contactfullname', 'personname'], example: 'John Doe' },
     { key: 'relationship', label: 'Relationship', type: 'string', required: true, aliases: ['relationship', 'relation', 'relationtoresident'], example: 'Spouse' },
     { key: 'phone', label: 'Phone', type: 'string', required: true, aliases: ['phone', 'mobile', 'phonenumber', 'contactnumber', 'tel', 'telephone', 'cell'], example: '+1 555 0100' },
@@ -216,7 +285,7 @@ export const VEHICLES_DEF: ImportEntityDef = {
   description: 'One row per vehicle. The resident is matched by full name.',
   fields: [
     { key: 'residentRef', label: 'Resident Name', type: 'string', required: true, refEntity: 'resident',
-      aliases: ['resident', 'residentname', 'tenant', 'tenantname', 'fullname', 'owner', 'vehicleowner'], example: 'Jane Doe' },
+      aliases: ['resident', 'residentname', 'tenant', 'tenantname', 'fullname', 'owner', 'vehicleowner', 'personid', 'residentid'], example: 'Jane Doe' },
     { key: 'type', label: 'Vehicle Type', type: 'enum', required: false, enumValues: ['Car', 'Motorcycle', 'Truck', 'Van', 'Bicycle', 'Other'], defaultValue: 'Car',
       aliases: ['type', 'vehicletype', 'category', 'vehiclecategory'], example: 'Car' },
     { key: 'make', label: 'Make', type: 'string', required: false, aliases: ['make', 'manufacturer', 'brand'], example: 'Toyota' },
@@ -233,12 +302,14 @@ export const VEHICLES_DEF: ImportEntityDef = {
 export const PARKING_SPACES_DEF: ImportEntityDef = {
   key: 'parkingSpaces',
   label: 'Parking Spaces',
-  description: 'One row per parking space. Building is matched by name; resident (if assigned) is matched by full name.',
+  description: 'One row per parking space. Building is matched by name or ID (or taken from the matched unit, if the sheet only has a Unit ID); resident (if assigned) is matched by name or ID.',
   fields: [
-    { key: 'buildingRef', label: 'Building Name', type: 'string', required: true, refEntity: 'building',
-      aliases: ['building', 'buildingname', 'property', 'propertyname', 'site', 'block'], example: 'Sunset Tower' },
+    { key: 'buildingRef', label: 'Building (optional)', type: 'string', required: false, refEntity: 'building',
+      aliases: ['buildingname', 'propertyname', 'propertyid', 'buildingid'], example: 'Sunset Tower' },
+    { key: 'flatRef', label: 'Unit (optional)', type: 'string', required: false, refEntity: 'flat',
+      aliases: ['unitid', 'unitno', 'unit', 'flat', 'flatno', 'apt', 'apartment'], example: '' },
     { key: 'residentRef', label: 'Assigned Resident (optional)', type: 'string', required: false, refEntity: 'resident',
-      aliases: ['resident', 'residentname', 'assignedto', 'assignedresident', 'assignee', 'tenant', 'owner'], example: '' },
+      aliases: ['resident', 'residentname', 'assignedto', 'assignedresident', 'assignee', 'tenant', 'owner', 'personid', 'residentid'], example: '' },
     { key: 'spaceNumber', label: 'Space Number', type: 'string', required: true, aliases: ['spacenumber', 'space', 'spotnumber', 'parkingno', 'baynumber', 'parkingspaceno', 'spaceid', 'lotnumber'], example: 'P-12' },
     { key: 'type', label: 'Type', type: 'enum', required: false, enumValues: ['Covered', 'Uncovered', 'Garage', 'Street'], defaultValue: 'Uncovered',
       aliases: ['type', 'parkingtype', 'category', 'spacetype'], example: 'Covered' },
@@ -282,7 +353,7 @@ export function guessEntityFromSheetName(name: string): ImportEntityKey | null {
   if (/parking/.test(n)) return 'parkingSpaces';
   if (/building|propert/.test(n)) return 'buildings';
   if (/flat|unit|apartment/.test(n)) return 'flats';
-  if (/resident|tenant|owner/.test(n)) return 'residents';
+  if (/resident|tenant|owner|people|person/.test(n)) return 'residents';
   if (/expense|cost/.test(n)) return 'expenses';
   return null;
 }

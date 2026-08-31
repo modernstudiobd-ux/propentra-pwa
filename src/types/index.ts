@@ -26,6 +26,7 @@ export interface Building {
   totalFlats: number;
   createdAt?: string; // ISO datetime
   updatedAt?: string; // ISO datetime
+  externalId?: string; // source record ID from an imported file (e.g. "BLDG-0001") - lets later sheets in the same workbook reference this record by ID instead of name
 }
 
 export const UNIT_TYPES = ['Studio', '1 Bedroom', '2 Bedroom', '3 Bedroom', '4+ Bedroom', 'Commercial', 'Other'] as const;
@@ -47,6 +48,7 @@ export interface Flat {
   currency?: string; // ISO 4217 code, e.g. 'USD' - falls back to company currency when unset
   parkingIncluded?: boolean;
   storageIncluded?: boolean;
+  externalId?: string; // source record ID from an imported file (e.g. "UNIT-0001")
 }
 
 export type ResidentType = 'Tenant' | 'Owner';
@@ -108,6 +110,7 @@ export interface Resident {
   // e.g. cleaning up years-old former residents).
   archived?: boolean;
   archivedAt?: string;
+  externalId?: string; // source record ID from an imported file (e.g. "P-00001")
 }
 
 export interface ChargeLine {

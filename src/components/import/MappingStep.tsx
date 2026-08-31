@@ -79,11 +79,21 @@ export default function MappingStep({
   );
 
   const usedCols = new Set(Object.values(mapping).filter((v) => v >= 0));
+  const hasNameParts = def.fields.some((f) => f.key === 'firstName');
 
-  const isFieldSatisfied = (f: ImportFieldDef) => {
-    const mapped = mapping[f.key] != null && mapping[f.key] >= 0;
-    const manual = manualValues[f.key] !== undefined && manualValues[f.key] !== '';
+  const isFieldMappedOrManual = (key: string) => {
+    const mapped = mapping[key] != null && mapping[key] >= 0;
+    const manual = manualValues[key] !== undefined && manualValues[key] !== '';
     return mapped || manual;
+  };
+  const isFieldSatisfied = (f: ImportFieldDef) => {
+    if (f.key === 'name' && hasNameParts) {
+      // A "Full Name" column isn't the only way to satisfy this - First
+      // and/or Last Name columns compose one automatically at import time
+      // (see buildProcessedRows in engine.ts).
+      return isFieldMappedOrManual('name') || isFieldMappedOrManual('firstName') || isFieldMappedOrManual('lastName');
+    }
+    return isFieldMappedOrManual(f.key);
   };
   const missingRequired = def.fields.filter((f) => f.required && !isFieldSatisfied(f));
 
@@ -222,6 +232,9 @@ export default function MappingStep({
               </div>
               {manualOpen && (
                 <div className="text-[11px] text-gray-400 mt-1 sm:ml-[15.5rem]">This exact value will be used for every row in this sheet.</div>
+              )}
+              {!manualOpen && field.key === 'name' && hasNameParts && !mapped && (
+                <div className="text-[11px] text-gray-400 mt-1 sm:ml-[15.5rem]">No column needed if First/Last Name below are mapped - composed automatically.</div>
               )}
             </div>
           );

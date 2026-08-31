@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { db } from '@/lib/db';
 import { resetDb } from '@/test/testUtils';
 import { autoMapColumns, detectColumnType } from '@/lib/import/detect';
-import { BUILDINGS_DEF, FLATS_DEF, RESIDENTS_DEF, EXPENSES_DEF } from '@/lib/import/schemas';
+import { BUILDINGS_DEF, FLATS_DEF, RESIDENTS_DEF, EXPENSES_DEF, TENANCIES_DEF, PARKING_SPACES_DEF } from '@/lib/import/schemas';
 import {
-  buildProcessedRows, resolveBuildingRefs, resolveFlatRefs, applyRefResolutions,
+  buildProcessedRows, resolveBuildingRefs, resolveFlatRefs, resolveResidentRefs, applyRefResolutions, finalizeRefErrors,
   detectDuplicates, commitImport, ImportRollbackError,
 } from '@/lib/import/engine';
 
@@ -95,7 +95,7 @@ describe('buildProcessedRows - coercion & validation', () => {
     const mapping = { name: 0, address: 1, totalFlats: 2 };
     const rows = buildProcessedRows(BUILDINGS_DEF, [['Sunset Tower', '123 Main St', '24']], mapping);
     expect(rows[0].errors).toEqual([]);
-    expect(rows[0].record).toEqual({ name: 'Sunset Tower', address: '123 Main St', totalFlats: 24 });
+    expect(rows[0].record).toMatchObject({ name: 'Sunset Tower', address: '123 Main St', totalFlats: 24 });
   });
 
   it('flags a missing required field', () => {
@@ -311,5 +311,189 @@ describe('commitImport', () => {
     await expect(commitImport(BUILDINGS_DEF, rows)).rejects.toBeInstanceOf(ImportRollbackError);
     spy.mockRestore();
     expect(await db.buildings.count()).toBe(0); // first row's insert was rolled back too
+  });
+});
+
+describe('name composition from First/Last Name columns', () => {
+  it('composes "name" from First + Last Name when there is no combined Full Name column', () => {
+    const mapping: Record<string, number> = {
+      buildingRef: -1, flatRef: -1, firstName: 0, middleName: -1, lastName: 1, preferredName: -1, name: -1,
+      mobile: -1, email: -1, type: -1, status: -1, moveInDate: -1, moveOutDate: -1, isBillingContact: -1, idType: -1, idNumber: -1,
+    };
+    const rows = buildProcessedRows(RESIDENTS_DEF, [['Stanley', 'Estrada']], mapping);
+    expect(rows[0].errors).toEqual([]);
+    expect(rows[0].record.name).toBe('Stanley Estrada');
+  });
+
+  it('still prefers a real mapped Full Name column over composing one', () => {
+    const mapping: Record<string, number> = {
+      buildingRef: -1, flatRef: -1, firstName: 1, middleName: -1, lastName: 2, preferredName: -1, name: 0,
+      mobile: -1, email: -1, type: -1, status: -1, moveInDate: -1, moveOutDate: -1, isBillingContact: -1, idType: -1, idNumber: -1,
+    };
+    const rows = buildProcessedRows(RESIDENTS_DEF, [['Jane Doe', 'Stanley', 'Estrada']], mapping);
+    expect(rows[0].record.name).toBe('Jane Doe');
+  });
+
+  it('leaves Building/Unit unset (not an error) when a People-style sheet has no location columns at all', () => {
+    const mapping: Record<string, number> = {
+      buildingRef: -1, flatRef: -1, firstName: 0, middleName: -1, lastName: 1, preferredName: -1, name: -1,
+      mobile: -1, email: -1, type: -1, status: -1, moveInDate: -1, moveOutDate: -1, isBillingContact: -1, idType: -1, idNumber: -1,
+    };
+    const rows = buildProcessedRows(RESIDENTS_DEF, [['Stanley', 'Estrada']], mapping);
+    expect(rows[0].errors).toEqual([]);
+  });
+});
+
+describe('cross-sheet reference resolution by Source ID (externalId)', () => {
+  it('matches a building reference by its Source ID even though the ref text isn\'t the building name', async () => {
+    await db.buildings.add({ name: 'Oakwood Residences', address: '', totalFlats: 0, externalId: 'BLDG-0001' });
+    const mapping = { buildingRef: 0, unitNo: 1, floor: -1, status: -1 };
+    const rows = buildProcessedRows(FLATS_DEF, [['BLDG-0001', '806']], mapping);
+    const distinct = await resolveBuildingRefs(rows);
+    expect(Array.from(distinct.values())[0].status).toBe('matched');
+  });
+
+  it('matches a flat reference by Source ID directly, without needing a Building column on that row', async () => {
+    const buildingId = (await db.buildings.add({ name: 'Oakwood Residences', address: '', totalFlats: 0, externalId: 'BLDG-0001' })) as number;
+    await db.flats.add({ buildingId, unitNo: '806', occupancyStatus: 'occupied', lifecycleStatus: 'active', externalId: 'UNIT-0001' });
+    const mapping = { residentRef: 0, buildingRef: -1, flatRef: 1, leaseType: -1, leaseStart: 2, leaseEnd: -1, moveIn: 3, moveOut: -1, monthlyRent: 4, currency: -1, deposit: -1, paymentFrequency: -1, occupancyStatus: -1 };
+    const rows = buildProcessedRows(TENANCIES_DEF, [['P-00001', 'UNIT-0001', '2025-01-01', '2025-01-01', '1850']], mapping);
+    const distinct = await resolveFlatRefs(rows);
+    expect(Array.from(distinct.values())[0].status).toBe('matched');
+  });
+
+  it('matches a resident reference by Source ID (Person ID) rather than name', async () => {
+    await db.residents.add({
+      name: 'Stanley Estrada', mobile: '', email: '', flatId: 0, buildingId: 0, unitLabel: '',
+      type: 'Tenant', status: 'current', isBillingContact: true, externalId: 'P-00001',
+    } as any);
+    const rows = buildProcessedRows(TENANCIES_DEF, [['P-00001', '', '', '', '2025-01-01', '2025-01-01', '1850']], {
+      residentRef: 0, buildingRef: -1, flatRef: -1, leaseType: -1, leaseStart: 4, leaseEnd: -1, moveIn: 5, moveOut: -1, monthlyRent: 6, currency: -1, deposit: -1, paymentFrequency: -1, occupancyStatus: -1,
+    });
+    const distinct = await resolveResidentRefs(rows);
+    expect(Array.from(distinct.values())[0].status).toBe('matched');
+  });
+});
+
+describe('relational workbook import end-to-end (Building -> Unit -> Person -> Tenancy)', () => {
+  it('backfills a resident\'s building/flat from a Tenancy row once its own Unit ID resolves, even though the People sheet had no location columns', async () => {
+    // 1. Building imported from a "Properties" sheet, keyed by Property ID.
+    const buildingRows = buildProcessedRows(BUILDINGS_DEF, [['Oakwood Residences', '', '', '', '', '', '', '', '100', 'BLDG-0001']],
+      { name: 0, address: 1, addressLine2: 2, locality: 3, adminArea: 4, postalCode: 5, countryCode: 6, propertyType: 7, status: -1, totalFlats: 8, externalId: 9 });
+    await detectDuplicates(BUILDINGS_DEF, buildingRows);
+    await commitImport(BUILDINGS_DEF, buildingRows);
+    const building = (await db.buildings.toArray())[0];
+    expect(building.externalId).toBe('BLDG-0001');
+
+    // 2. Unit imported from a "Units" sheet - Building matched by its own
+    // Property ID, not by name.
+    const flatMapping = { buildingRef: 0, unitNo: 1, floor: -1, occupancyStatus: -1, lifecycleStatus: -1, unitType: -1, bedrooms: -1, bathrooms: -1, sqft: -1, standardRent: -1, currency: -1, parkingIncluded: -1, storageIncluded: -1, externalId: 2 };
+    const flatRows = buildProcessedRows(FLATS_DEF, [['BLDG-0001', '806', 'UNIT-0001']], flatMapping);
+    const bDistinct = await resolveBuildingRefs(flatRows);
+    applyRefResolutions(flatRows, bDistinct, new Map());
+    await detectDuplicates(FLATS_DEF, flatRows);
+    await commitImport(FLATS_DEF, flatRows);
+    const flat = (await db.flats.toArray())[0];
+    expect(flat.externalId).toBe('UNIT-0001');
+    expect(flat.buildingId).toBe(building.id);
+
+    // 3. Person imported from a "People" sheet - NO building/unit columns at
+    // all (RESIDENTS_DEF's location fields are optional for this reason).
+    const residentMapping: Record<string, number> = {
+      buildingRef: -1, flatRef: -1, firstName: 0, middleName: -1, lastName: 1, preferredName: -1, name: -1,
+      companyName: -1, mobile: -1, altPhone: -1, email: -1, preferredContactMethod: -1, dob: -1, nationality: -1,
+      language: -1, idType: -1, idNumber: -1, taxLegalName: -1, taxIdType: -1, taxIdLast4: -1, consentStatus: -1,
+      marketingConsent: -1, dataProcessingConsent: -1, type: 2, status: -1, moveInDate: -1, moveOutDate: -1,
+      isBillingContact: -1, externalId: 3,
+    };
+    const residentRows = buildProcessedRows(RESIDENTS_DEF, [['Stanley', 'Estrada', 'Tenant', 'P-00001']], residentMapping);
+    expect(residentRows[0].errors).toEqual([]); // no location required
+    await detectDuplicates(RESIDENTS_DEF, residentRows);
+    await commitImport(RESIDENTS_DEF, residentRows);
+    const resident = (await db.residents.toArray())[0];
+    expect(resident.name).toBe('Stanley Estrada');
+    expect(resident.buildingId).toBeFalsy(); // not yet situated
+
+    // 4. Tenancy imported from a "Tenancies" sheet - resident matched by
+    // Person ID, unit matched by its own Unit ID (not derived from a
+    // Building column, since the Tenancy sheet skips straight to Unit ID).
+    const tenancyMapping = { residentRef: 0, buildingRef: -1, flatRef: 1, leaseType: -1, leaseStart: 2, leaseEnd: -1, moveIn: 3, moveOut: -1, monthlyRent: 4, currency: -1, deposit: -1, paymentFrequency: -1, occupancyStatus: -1 };
+    const tenancyRows = buildProcessedRows(TENANCIES_DEF, [['P-00001', 'UNIT-0001', '2025-03-18', '2025-03-18', '1850']], tenancyMapping);
+    const rDistinct = await resolveResidentRefs(tenancyRows);
+    const fDistinct = await resolveFlatRefs(tenancyRows);
+    applyRefResolutions(tenancyRows, new Map(), fDistinct, rDistinct);
+    expect(tenancyRows[0].errors).toEqual([]);
+    await detectDuplicates(TENANCIES_DEF, tenancyRows);
+    const result = await commitImport(TENANCIES_DEF, tenancyRows);
+    expect(result.created).toBe(1);
+
+    const tenancy = (await db.tenancies.toArray())[0];
+    expect(tenancy.flatId).toBe(flat.id);
+    expect(tenancy.buildingId).toBe(building.id);
+
+    // The resident record itself is now retroactively situated too.
+    const updatedResident = await db.residents.get(resident.id as number);
+    expect(updatedResident?.buildingId).toBe(building.id);
+    expect(updatedResident?.flatId).toBe(flat.id);
+    expect(updatedResident?.unitLabel).toBe('806');
+  });
+
+  it('derives a Parking Space\'s building from its Unit ID when the sheet has no Property ID column at all', async () => {
+    const buildingId = (await db.buildings.add({ name: 'Oakwood Residences', address: '', totalFlats: 0, externalId: 'BLDG-0001' })) as number;
+    const flatId = (await db.flats.add({ buildingId, unitNo: '806', occupancyStatus: 'occupied', lifecycleStatus: 'active', externalId: 'UNIT-0001' })) as number;
+
+    const mapping = { buildingRef: -1, flatRef: 0, residentRef: -1, spaceNumber: 1, type: -1, assignedDate: -1, status: -1 };
+    const rows = buildProcessedRows(PARKING_SPACES_DEF, [['UNIT-0001', 'P-001']], mapping);
+    const fDistinct = await resolveFlatRefs(rows);
+    applyRefResolutions(rows, new Map(), fDistinct);
+    await detectDuplicates(PARKING_SPACES_DEF, rows);
+    const result = await commitImport(PARKING_SPACES_DEF, rows);
+    expect(result.created).toBe(1);
+
+    const space = (await db.parkingSpaces.toArray())[0];
+    expect(space.flatId).toBe(flatId);
+    expect(space.buildingId).toBe(buildingId);
+  });
+
+  it('does not prematurely error a reference that simply hasn\'t had its resolution step yet, across multiple wizard steps for a multi-reference entity', async () => {
+    // Regression test: Tenancies has Resident + (optional) Building + Unit
+    // references, each resolved in a SEPARATE wizard step exactly like the
+    // real ImportWizard does. Resolving Building first must not permanently
+    // flag Unit/Resident as unmatched just because their own step hasn't
+    // run yet.
+    const buildingId = (await db.buildings.add({ name: 'Oakwood Residences', address: '', totalFlats: 0, externalId: 'BLDG-0001' })) as number;
+    const flatId = (await db.flats.add({ buildingId, unitNo: '806', occupancyStatus: 'occupied', lifecycleStatus: 'active', externalId: 'UNIT-0001' })) as number;
+    const residentId = (await db.residents.add({
+      name: 'Stanley Estrada', mobile: '', email: '', flatId: 0, buildingId: 0, unitLabel: '',
+      type: 'Tenant', status: 'current', isBillingContact: true, externalId: 'P-00001',
+    } as any)) as number;
+
+    const mapping = { residentRef: 0, buildingRef: 1, flatRef: 2, leaseType: -1, leaseStart: 3, leaseEnd: -1, moveIn: 4, moveOut: -1, monthlyRent: 5, currency: -1, deposit: -1, paymentFrequency: -1, occupancyStatus: -1 };
+    const rows = buildProcessedRows(TENANCIES_DEF, [['P-00001', 'BLDG-0001', 'UNIT-0001', '2025-03-18', '2025-03-18', '1850']], mapping);
+
+    // Step 1 (Building) - exactly mirrors ImportWizard's proceedFromBuildingRels.
+    const bDistinct = await resolveBuildingRefs(rows);
+    applyRefResolutions(rows, bDistinct, new Map(), undefined, { finalize: false });
+    expect(rows[0].errors).toEqual([]); // Unit/Resident haven't been checked yet - must NOT be flagged here
+
+    // Step 2 (Unit) - exactly mirrors proceedFromFlatRels.
+    const fDistinct = await resolveFlatRefs(rows);
+    applyRefResolutions(rows, new Map(), fDistinct, undefined, { finalize: false });
+    expect(rows[0].errors).toEqual([]);
+
+    // Step 3 (Resident) - exactly mirrors proceedFromResidentRels, then
+    // goToPreview's single finalization pass.
+    const rDistinct = await resolveResidentRefs(rows);
+    applyRefResolutions(rows, new Map(), new Map(), rDistinct, { finalize: false });
+    finalizeRefErrors(rows);
+    expect(rows[0].errors).toEqual([]);
+
+    await detectDuplicates(TENANCIES_DEF, rows);
+    const result = await commitImport(TENANCIES_DEF, rows);
+    expect(result.created).toBe(1);
+    const tenancy = (await db.tenancies.toArray())[0];
+    expect(tenancy.residentId).toBe(residentId);
+    expect(tenancy.flatId).toBe(flatId);
+    expect(tenancy.buildingId).toBe(buildingId);
   });
 });

@@ -10,7 +10,7 @@ import {
   IMPORT_ENTITIES, IMPORT_ENTITY_ORDER, guessEntityFromSheetName, normalizeHeader, type ImportEntityKey,
 } from '@/lib/import/schemas';
 import {
-  buildProcessedRows, resolveBuildingRefs, resolveFlatRefs, resolveResidentRefs, applyRefResolutions, detectDuplicates,
+  buildProcessedRows, resolveBuildingRefs, resolveFlatRefs, resolveResidentRefs, applyRefResolutions, finalizeRefErrors, detectDuplicates,
   commitImport, ImportRollbackError, type ProcessedRow, type RefResolution, type DuplicateDecision, type ImportRunResult,
 } from '@/lib/import/engine';
 import { downloadCsvTemplate, downloadErrorReport } from '@/lib/import/csvExport';
@@ -231,7 +231,7 @@ export default function ImportWizard() {
     if (!currentDef) return;
     setBusy(true);
     try {
-      applyRefResolutions(rows, resolutions, new Map());
+      applyRefResolutions(rows, resolutions, new Map(), undefined, { finalize: false });
       const hasFlatRef = currentDef.fields.some((f) => f.refEntity === 'flat');
       if (hasFlatRef) {
         const distinct = await resolveFlatRefs(rows);
@@ -248,7 +248,7 @@ export default function ImportWizard() {
   async function proceedFromFlatRels(resolutions: Map<string, RefResolution>) {
     setBusy(true);
     try {
-      applyRefResolutions(rows, new Map(), resolutions);
+      applyRefResolutions(rows, new Map(), resolutions, undefined, { finalize: false });
       await proceedToResidentOrPreview(rows);
     } finally {
       setBusy(false);
@@ -271,7 +271,7 @@ export default function ImportWizard() {
   async function proceedFromResidentRels(resolutions: Map<string, RefResolution>) {
     setBusy(true);
     try {
-      applyRefResolutions(rows, new Map(), new Map(), resolutions);
+      applyRefResolutions(rows, new Map(), new Map(), resolutions, { finalize: false });
       await goToPreview(rows);
     } finally {
       setBusy(false);
@@ -280,6 +280,10 @@ export default function ImportWizard() {
 
   async function goToPreview(processedRows: ProcessedRow[]) {
     if (!currentDef) return;
+    // Every applicable reference type for this entity has now had its
+    // resolution step (building/unit/resident, whichever apply) - this is
+    // the single correct point to flag any that are still unmatched.
+    finalizeRefErrors(processedRows);
     await detectDuplicates(currentDef, processedRows);
     const decided = processedRows.map((r) => (r.duplicate ? { ...r, decision: globalDecision } : r));
     setRows(decided);

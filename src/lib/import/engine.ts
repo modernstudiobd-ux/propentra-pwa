@@ -68,8 +68,8 @@ function coerceValue(cell: any, field: ImportFieldDef): { value: any; error?: st
     case 'boolean': {
       if (typeof cell === 'boolean') return { value: cell };
       const s = String(cell).trim().toLowerCase();
-      if (['true', 'yes', 'y', '1'].includes(s)) return { value: true };
-      if (['false', 'no', 'n', '0'].includes(s)) return { value: false };
+      if (['true', 'yes', 'y', '1', 'granted', 'approved', 'consented', 'agreed', 'on'].includes(s)) return { value: true };
+      if (['false', 'no', 'n', '0', 'declined', 'denied', 'refused', 'off', 'not_asked', 'notasked'].includes(s)) return { value: false };
       return { value: undefined, error: 'must be Yes/No' };
     }
     case 'date': {
@@ -82,6 +82,11 @@ function coerceValue(cell: any, field: ImportFieldDef): { value: any; error?: st
       const match = field.enumValues?.find((v) => v.toLowerCase() === s.toLowerCase());
       if (match) return { value: match };
       if (field.defaultValue !== undefined) return { value: field.defaultValue };
+      // An optional field with a value that doesn't match any known option
+      // (e.g. a real-world export using "Phone" where this app expects
+      // "Mobile") is dropped rather than failing the whole row - it simply
+      // wasn't important enough to require in the first place.
+      if (!field.required) return { value: undefined };
       return { value: undefined, error: `must be one of: ${field.enumValues?.join(', ')}` };
     }
     default:
@@ -93,12 +98,26 @@ function coerceValue(cell: any, field: ImportFieldDef): { value: any; error?: st
  *
  * `manualValues` supplies a single fixed value (as if it were a cell) for any field the person chose not to map to a column - either because the sheet has no matching column at all (required field, or an optional-but-important one like "Storage Included" they still want to set explicitly), or because they'd rather apply one value to every row than add a column. Manual values are looked up ahead of the sheet column for a field.
  */
+/** Reads one field's cell for a row the same way the main loop does (mapped column, else manual value) - used to pull First/Middle/Last Name for name composition without duplicating that lookup logic. */
+function readFieldCell(row: any[], key: string, mapping: Record<string, number>, manualValues?: Record<string, string>): any {
+  const idx = mapping[key];
+  if (idx != null && idx >= 0) return row[idx];
+  const manual = manualValues?.[key];
+  return manual !== undefined ? manual : '';
+}
+
 export function buildProcessedRows(
   def: ImportEntityDef,
   dataRows: any[][],
   mapping: Record<string, number>,
   manualValues?: Record<string, string>
 ): ProcessedRow[] {
+  // A sheet that splits a person's name into First/Middle/Last/Preferred
+  // columns (instead of one combined "Full Name" column) still satisfies
+  // the required `name` field - it's composed from the parts below, per row,
+  // whenever `name` itself has no mapped column or manual value.
+  const hasNameParts = def.fields.some((f) => f.key === 'firstName') && def.fields.some((f) => f.key === 'name');
+
   return dataRows.map((row, rowIndex) => {
     const raw: Record<string, any> = {};
     const record: Record<string, any> = {};
@@ -113,7 +132,16 @@ export function buildProcessedRows(
       // happen to be set at once (the UI keeps them mutually exclusive, but
       // the engine itself shouldn't rely on that - a genuine column of data
       // is always more specific than a single fixed fallback value).
-      const cell = hasColumn ? row[colIdx] : (manual !== undefined && manual !== '' ? manual : '');
+      let cell = hasColumn ? row[colIdx] : (manual !== undefined && manual !== '' ? manual : '');
+
+      if (field.key === 'name' && hasNameParts && (cell === '' || cell === null || cell === undefined)) {
+        const first = readFieldCell(row, 'firstName', mapping, manualValues);
+        const middle = readFieldCell(row, 'middleName', mapping, manualValues);
+        const last = readFieldCell(row, 'lastName', mapping, manualValues);
+        const composed = [first, middle, last].map((v) => (v ?? '').toString().trim()).filter(Boolean).join(' ');
+        if (composed) cell = composed;
+      }
+
       raw[field.key] = cell;
 
       if (field.refEntity) {
@@ -134,32 +162,49 @@ export function buildProcessedRows(
 
 // --- Step 2: relationship resolution -----------------------------------
 
-/** Distinct building-name values across all rows, each matched against existing buildings (or flagged unmatched). Keyed by normalizeHeader(raw name). */
+/** Distinct building-name values across all rows, each matched against existing buildings (or flagged unmatched). Keyed by normalizeHeader(raw name). Checks a building's own Source ID (externalId) first - far more reliable than matching by name, and what lets a workbook that links tabs by "Property ID" resolve correctly - then falls back to matching by name for files that only ever had a Building Name column. */
 export async function resolveBuildingRefs(rows: ProcessedRow[]): Promise<Map<string, RefResolution>> {
   const existing = await db.buildings.toArray();
   const byName = new Map(existing.map((b) => [normalizeHeader(b.name), b]));
+  const byExternalId = new Map(existing.filter((b) => b.externalId).map((b) => [normalizeHeader(b.externalId as string), b]));
   const distinct = new Map<string, RefResolution>();
   for (const row of rows) {
     const ref = row.refs['buildingRef'];
     if (!ref || !ref.raw) continue;
     const key = normalizeHeader(ref.raw);
     if (distinct.has(key)) continue;
-    const match = byName.get(key);
+    const match = byExternalId.get(key) ?? byName.get(key);
     distinct.set(key, match ? { raw: ref.raw, status: 'matched', matchedId: match.id } : { raw: ref.raw, status: 'unmatched' });
   }
   return distinct;
 }
 
-/** Distinct (building, unit) pairs, matched against existing flats scoped to that building. Rows whose building will be newly created can never match an existing flat, so those are reported separately as always-"create". Call AFTER building resolutions have been applied to rows via applyRefResolutions. */
+/** Distinct (building, unit) pairs, matched against existing flats scoped to that building. Rows whose building will be newly created can never match an existing flat, so those are reported separately as always-"create". Call AFTER building resolutions have been applied to rows via applyRefResolutions.
+ *
+ * A flat's own Source ID (externalId, e.g. "UNIT-0001") is checked first and
+ * resolves independently of building - a workbook that links tabs by ID
+ * (e.g. a Tenancy sheet's "Unit ID") doesn't need its own Building column at
+ * all for this to work. Only when there's no externalId match does this fall
+ * back to the building-scoped unit-number lookup used by simpler files.
+ */
 export async function resolveFlatRefs(rows: ProcessedRow[]): Promise<Map<string, RefResolution>> {
   const existing = await db.flats.toArray();
   const byKey = new Map(existing.map((f) => [`${f.buildingId}::${normalizeHeader(f.unitNo)}`, f]));
+  const byExternalId = new Map(existing.filter((f) => f.externalId).map((f) => [normalizeHeader(f.externalId as string), f]));
   const distinct = new Map<string, RefResolution>();
   for (const row of rows) {
     const fRef = row.refs['flatRef'];
-    const bRef = row.refs['buildingRef'];
     if (!fRef || !fRef.raw) continue;
-    if (!bRef || bRef.status === 'unmatched') continue; // building unresolved - row already carries an error
+
+    const extKey = normalizeHeader(fRef.raw);
+    const extMatch = byExternalId.get(extKey);
+    if (extMatch) {
+      if (!distinct.has(extKey)) distinct.set(extKey, { raw: fRef.raw, status: 'matched', matchedId: extMatch.id });
+      continue;
+    }
+
+    const bRef = row.refs['buildingRef'];
+    if (!bRef || !bRef.raw || bRef.status === 'unmatched') continue; // no building to scope by, and no ID match either
     if (bRef.status === 'create') continue; // brand-new building can't have an existing flat; always created together
     const key = `${bRef.matchedId}::${normalizeHeader(fRef.raw)}`;
     if (distinct.has(key)) continue;
@@ -173,24 +218,39 @@ export async function resolveFlatRefs(rows: ProcessedRow[]): Promise<Map<string,
 export async function resolveResidentRefs(rows: ProcessedRow[]): Promise<Map<string, RefResolution>> {
   const existing = await db.residents.toArray();
   const byName = new Map(existing.map((r) => [normalizeHeader(r.name), r]));
+  const byExternalId = new Map(existing.filter((r) => r.externalId).map((r) => [normalizeHeader(r.externalId as string), r]));
   const distinct = new Map<string, RefResolution>();
   for (const row of rows) {
     const ref = row.refs['residentRef'];
     if (!ref || !ref.raw) continue;
     const key = normalizeHeader(ref.raw);
     if (distinct.has(key)) continue;
-    const match = byName.get(key);
+    const match = byExternalId.get(key) ?? byName.get(key);
     distinct.set(key, match ? { raw: ref.raw, status: 'matched', matchedId: match.id } : { raw: ref.raw, status: 'unmatched' });
   }
   return distinct;
 }
 
-/** Applies the user's confirmed choices for each distinct building/flat/resident value back onto every row, and turns any value still left unmatched into a row-level error. */
+/** Applies the user's confirmed choices for each distinct building/flat/resident value back onto every row.
+ *
+ * By default also turns any value still left unmatched into a row-level
+ * error (`finalize: true`, the right behavior for an entity with only one
+ * kind of reference, resolved in a single call). An entity with SEVERAL
+ * reference types (e.g. Residents/Tenancies with Building + Unit + Resident)
+ * goes through this function once per reference type, in separate wizard
+ * steps - passing `finalize: false` on every one of those intermediate
+ * calls is essential, or a reference that simply hasn't had its turn yet
+ * (e.g. Unit, on the call that only just resolved Building) would be
+ * wrongly flagged as permanently unmatched before it was ever attempted.
+ * Call `finalizeRefErrors` once, after every applicable reference type has
+ * been resolved, to do that check exactly once with the complete picture.
+ */
 export function applyRefResolutions(
   rows: ProcessedRow[],
   buildingResolutions: Map<string, RefResolution>,
   flatResolutions: Map<string, RefResolution>,
-  residentResolutions?: Map<string, RefResolution>
+  residentResolutions?: Map<string, RefResolution>,
+  options?: { finalize?: boolean }
 ) {
   for (const row of rows) {
     const bRef = row.refs['buildingRef'];
@@ -201,12 +261,19 @@ export function applyRefResolutions(
 
     const fRef = row.refs['flatRef'];
     const bNow = row.refs['buildingRef'];
-    if (fRef?.raw && bNow?.raw) {
-      if (bNow.status === 'matched') {
-        const resolved = flatResolutions.get(`${bNow.matchedId}::${normalizeHeader(fRef.raw)}`);
-        if (resolved) row.refs['flatRef'] = resolved;
-      } else if (bNow.status === 'create') {
-        row.refs['flatRef'] = { raw: fRef.raw, status: 'create' };
+    if (fRef?.raw) {
+      // A flat matched directly by its own Source ID (externalId) resolves
+      // independently of building - try that first.
+      const extResolved = flatResolutions.get(normalizeHeader(fRef.raw));
+      if (extResolved) {
+        row.refs['flatRef'] = extResolved;
+      } else if (bNow?.raw) {
+        if (bNow.status === 'matched') {
+          const resolved = flatResolutions.get(`${bNow.matchedId}::${normalizeHeader(fRef.raw)}`);
+          if (resolved) row.refs['flatRef'] = resolved;
+        } else if (bNow.status === 'create') {
+          row.refs['flatRef'] = { raw: fRef.raw, status: 'create' };
+        }
       }
     }
 
@@ -215,7 +282,14 @@ export function applyRefResolutions(
       const resolved = residentResolutions.get(normalizeHeader(rRef.raw));
       if (resolved) row.refs['residentRef'] = resolved;
     }
+  }
 
+  if (options?.finalize ?? true) finalizeRefErrors(rows);
+}
+
+/** Turns any reference still left unmatched, across every reference field on every row, into a row-level error. Safe to call more than once - already-recorded messages are never duplicated. See applyRefResolutions for why this must run only once ALL applicable reference types for the entity have had their resolution step. */
+export function finalizeRefErrors(rows: ProcessedRow[]) {
+  for (const row of rows) {
     for (const [fieldKey, ref] of Object.entries(row.refs)) {
       if (ref.raw && ref.status === 'unmatched') {
         const label = fieldKey === 'buildingRef' ? 'Building' : fieldKey === 'flatRef' ? 'Unit' : 'Resident';
@@ -353,16 +427,41 @@ export async function commitImport(def: ImportEntityDef, rows: ProcessedRow[]): 
         // Residents carry a denormalized unit label alongside flatId, same
         // convention used everywhere else in the app (see types/index.ts).
         if (def.key === 'residents' && fRef?.raw) finalRecord.unitLabel = fRef.raw;
-        // Tenancy/Ownership/Vehicle have no Building/Unit columns of their
-        // own in the import sheet - their building/flat is simply wherever
-        // the matched resident already lives.
-        if (DERIVE_LOCATION_FROM_RESIDENT[def.key] && matchedResident) {
-          finalRecord.buildingId = matchedResident.buildingId;
-          finalRecord.flatId = matchedResident.flatId;
-        }
         // Parking spaces may optionally be pre-assigned to a resident's unit.
         if (def.key === 'parkingSpaces' && matchedResident && finalRecord.flatId === undefined) {
           finalRecord.flatId = matchedResident.flatId;
+        }
+        // A row with its own resolved Unit but no Building column (common
+        // once a sheet links tabs by ID - e.g. a Tenancy/Parking row that
+        // gives a Unit ID but no separate Property ID) gets its building
+        // straight from that unit - always more specific/reliable than
+        // falling back to the resident below.
+        if (finalRecord.buildingId === undefined && finalRecord.flatId !== undefined) {
+          const flat = await db.flats.get(finalRecord.flatId);
+          if (flat) finalRecord.buildingId = flat.buildingId;
+        }
+        // Tenancy/Ownership/Vehicle fall back to wherever the matched
+        // resident already lives ONLY when still unknown at this point - a
+        // sheet with its own Property ID/Unit ID (or one derived from Unit
+        // ID above) always wins, since it's more specific than the
+        // resident's on-file location.
+        if (DERIVE_LOCATION_FROM_RESIDENT[def.key] && matchedResident) {
+          if (finalRecord.buildingId === undefined) finalRecord.buildingId = matchedResident.buildingId;
+          if (finalRecord.flatId === undefined) finalRecord.flatId = matchedResident.flatId;
+        }
+        // A resident imported from a sheet with no Building/Unit columns of
+        // its own (e.g. a "People" tab, situated later by Tenancy/Ownership)
+        // has no location yet. The first child row that both matches this
+        // resident AND states its own building/unit backfills it onto the
+        // resident record - a one-time correction, never overwriting a
+        // location the resident already has.
+        if (matchedResident && !matchedResident.buildingId && finalRecord.buildingId !== undefined && finalRecord.flatId !== undefined) {
+          const flat = await db.flats.get(finalRecord.flatId);
+          await db.residents.update(matchedResident.id, {
+            buildingId: finalRecord.buildingId,
+            flatId: finalRecord.flatId,
+            unitLabel: flat?.unitNo ?? matchedResident.unitLabel,
+          });
         }
 
         if (row.duplicate && row.decision === 'update') {
