@@ -6,12 +6,13 @@ import { logAudit } from '@/lib/audit';
 // how restore should interpret it. Restore uses this to decide whether it
 // can safely import a file (older backups are fine; newer/unknown ones are
 // rejected rather than silently importing data restore doesn't understand).
-export const BACKUP_FORMAT_VERSION = 5;
+export const BACKUP_FORMAT_VERSION = 6;
 
 export const TABLES = [
   'buildings', 'flats', 'residents', 'bills', 'receipts', 'payments', 'settings',
   'depositTransactions', 'maintenanceRequests', 'expenses', 'reminders', 'documents', 'auditLog',
   'importTemplates', 'tenancies', 'ownerships', 'contacts', 'emergencyContacts', 'vehicles', 'parkingSpaces',
+  'sequences',
 ] as const;
 
 export type TableName = (typeof TABLES)[number];
@@ -35,6 +36,7 @@ const TABLE_INTRODUCED_IN: Record<TableName, number> = {
   auditLog: 3,
   importTemplates: 4,
   tenancies: 5, ownerships: 5, contacts: 5, emergencyContacts: 5, vehicles: 5, parkingSpaces: 5,
+  sequences: 6,
 };
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {

@@ -104,15 +104,15 @@ export default function Payments() {
           <table className="w-full min-w-[800px]">
             <thead className="bg-gray-50">
               <tr>
-                <th className="table-th">#</th><th className="table-th">Date</th><th className="table-th">Invoice #</th>
+                <th className="table-th">ID</th><th className="table-th">Date</th><th className="table-th">Invoice #</th>
                 <th className="table-th">Resident / Flat</th><th className="table-th">Method</th>
                 <th className="table-th">Amount</th><th className="table-th">Type</th><th className="table-th text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((p, i) => (
+              {filtered.map((p) => (
                 <tr key={p.id} className={p.voided ? 'opacity-50' : ''}>
-                  <td className="table-td">{i + 1}</td>
+                  <td className="table-td font-mono text-xs text-gray-500">{p.displayId ?? '—'}</td>
                   <td className="table-td">{dateLabel(p.date)}</td>
                   <td className="table-td font-medium text-gray-800">{invoiceNo(p.invoiceId)}</td>
                   <td className="table-td">{residentName(p.residentId)} ({flatLabel(p.flatId)})</td>
@@ -146,6 +146,7 @@ export default function Payments() {
             <div key={p.id} className={`p-4 flex items-start justify-between gap-3 ${p.voided ? 'opacity-50' : ''}`}>
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] text-gray-400 font-mono">{p.displayId ?? '—'}</span>
                   <span className="font-medium text-gray-800">{invoiceNo(p.invoiceId)}</span>
                   {p.voided ? <span className="badge-unpaid">Voided</span> : <span className={p.type === 'Full' ? 'badge-paid' : 'badge-partial'}>{p.type}</span>}
                 </div>

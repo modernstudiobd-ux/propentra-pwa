@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
+import { nextDisplayId } from '@/lib/ids';
 import type { Bill, Payment, CompanySettings } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -107,7 +108,7 @@ export async function recordPaymentForBill(
   if (!bill.id) throw new Error('Bill has no id');
   validatePaymentAmount(bill, amountReceived);
 
-  return db.transaction('rw', [db.bills, db.receipts, db.payments, db.settings, db.auditLog], async () => {
+  return db.transaction('rw', [db.bills, db.receipts, db.payments, db.settings, db.auditLog, db.sequences], async () => {
     // Re-read the bill inside the transaction in case it changed since the
     // caller loaded it (e.g. another payment was just recorded) - avoids a
     // stale-read race that could double-apply or miscalculate the balance.
@@ -148,6 +149,7 @@ export async function recordPaymentForBill(
       amount: amountReceived,
       type: status === 'paid' ? 'Full' : 'Partial',
       voided: false,
+      displayId: await nextDisplayId('payments'),
     });
 
     await logAudit({

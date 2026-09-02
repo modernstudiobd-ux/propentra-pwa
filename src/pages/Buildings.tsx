@@ -1,10 +1,15 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
-import { Plus, Pencil, Trash2, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Layers } from 'lucide-react';
 import Modal from '@/components/Modal';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import BulkToolbar from '@/components/BulkToolbar';
+import BulkAddModal, { type BulkAddField } from '@/components/BulkAddModal';
+import { useBulkSelection } from '@/hooks/useBulkSelection';
 import type { Building } from '@/types';
 import { PROPERTY_TYPES, BUILDING_STATUSES } from '@/types';
+import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
 
 function nowIso() { return new Date().toISOString(); }
 const empty = (): Building => ({
@@ -12,15 +17,30 @@ const empty = (): Building => ({
   propertyType: '', status: 'active', totalFlats: 0,
 });
 
+type BulkRow = { name: string; address: string; locality: string; propertyType: string; totalFlats: number | '' };
+const bulkFields: BulkAddField<BulkRow>[] = [
+  { key: 'name', label: 'Building Name', type: 'text', required: true, placeholder: 'Oakwood Residences' },
+  { key: 'address', label: 'Address', type: 'text', required: true, placeholder: '1200 Oakwood Avenue' },
+  { key: 'locality', label: 'City', type: 'text' },
+  { key: 'propertyType', label: 'Type', type: 'select', options: ['', ...PROPERTY_TYPES] },
+  { key: 'totalFlats', label: 'Total Flats', type: 'number' },
+];
+const bulkEmptyRow = (): BulkRow => ({ name: '', address: '', locality: '', propertyType: '', totalFlats: '' });
+
 export default function Buildings() {
   const buildings = useLiveQuery(() => db.buildings.toArray(), []) ?? [];
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [form, setForm] = useState<Building>(empty());
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const filtered = buildings.filter((b) =>
-    b.name.toLowerCase().includes(query.toLowerCase()) || b.address.toLowerCase().includes(query.toLowerCase())
+    b.name.toLowerCase().includes(query.toLowerCase()) || b.address.toLowerCase().includes(query.toLowerCase()) ||
+    (b.displayId ?? '').toLowerCase().includes(query.toLowerCase())
   );
+  const bulk = useBulkSelection(filtered);
 
   function openAdd() { setForm(empty()); setOpen(true); }
   function openEdit(b: Building) { setForm({ ...empty(), ...b }); setOpen(true); }
@@ -28,14 +48,28 @@ export default function Buildings() {
   async function save() {
     if (!form.name.trim() || !form.address.trim()) return;
     if (form.id) await db.buildings.update(form.id, { ...form, updatedAt: nowIso() });
-    else await db.buildings.add({ ...form, createdAt: nowIso(), updatedAt: nowIso() });
+    else await db.buildings.add({ ...form, displayId: await nextDisplayId('buildings'), createdAt: nowIso(), updatedAt: nowIso() });
     setOpen(false);
   }
 
-  async function remove(id?: number) {
-    if (!id) return;
-    if (!confirm('Delete this building? This cannot be undone.')) return;
+  async function remove(id: number) {
     await db.buildings.delete(id);
+  }
+
+  async function bulkDelete() {
+    await db.buildings.bulkDelete(bulk.selectedIds());
+    bulk.clear();
+    setConfirmBulkDelete(false);
+  }
+
+  async function bulkCommit(rows: BulkRow[]) {
+    const displayIds = await nextDisplayIds('buildings', rows.length);
+    const now = nowIso();
+    await db.buildings.bulkAdd(rows.map((r, i) => ({
+      name: r.name.trim(), address: r.address.trim(), locality: r.locality.trim() || undefined,
+      propertyType: r.propertyType || undefined, totalFlats: r.totalFlats === '' ? 0 : Number(r.totalFlats),
+      status: 'active', displayId: displayIds[i], createdAt: now, updatedAt: now,
+    })));
   }
 
   return (
@@ -46,17 +80,25 @@ export default function Buildings() {
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search buildings..."
             className="input pl-9" />
         </div>
-        <button onClick={openAdd} className="btn-primary flex items-center gap-2 justify-center">
-          <Plus size={16} /> Add Building
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setBulkOpen(true)} className="btn-secondary flex items-center gap-2 justify-center">
+            <Layers size={16} /> Bulk Add
+          </button>
+          <button onClick={openAdd} className="btn-primary flex items-center gap-2 justify-center">
+            <Plus size={16} /> Add Building
+          </button>
+        </div>
       </div>
+
+      <BulkToolbar count={bulk.count} onDelete={() => setConfirmBulkDelete(true)} onClear={bulk.clear} />
 
       <div className="card overflow-hidden">
         <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full min-w-[600px]">
+          <table className="w-full min-w-[700px]">
             <thead className="bg-gray-50">
               <tr>
-                <th className="table-th">#</th>
+                <th className="table-th w-8"><input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} /></th>
+                <th className="table-th">ID</th>
                 <th className="table-th">Building Name</th>
                 <th className="table-th">Address</th>
                 <th className="table-th">Type</th>
@@ -65,21 +107,22 @@ export default function Buildings() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map((b, i) => (
-                <tr key={b.id}>
-                  <td className="table-td">{i + 1}</td>
+              {filtered.map((b) => (
+                <tr key={b.id} className={bulk.isSelected(b.id) ? 'bg-brand-50/40' : ''}>
+                  <td className="table-td"><input type="checkbox" checked={bulk.isSelected(b.id)} onChange={() => bulk.toggle(b.id)} /></td>
+                  <td className="table-td font-mono text-xs text-gray-500">{b.displayId ?? '—'}</td>
                   <td className="table-td font-medium text-gray-800">{b.name}</td>
                   <td className="table-td">{b.address}{b.locality ? `, ${b.locality}` : ''}</td>
                   <td className="table-td text-gray-500">{b.propertyType || '—'}</td>
                   <td className="table-td">{b.totalFlats}</td>
                   <td className="table-td text-right">
                     <button onClick={() => openEdit(b)} className="icon-btn text-brand-500 mr-1"><Pencil size={16} /></button>
-                    <button onClick={() => remove(b.id)} className="icon-btn text-red-400"><Trash2 size={16} /></button>
+                    <button onClick={() => setConfirmDeleteId(b.id!)} className="icon-btn text-red-400"><Trash2 size={16} /></button>
                   </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={6} className="text-center text-sm text-gray-400 py-8">No buildings found</td></tr>
+                <tr><td colSpan={7} className="text-center text-sm text-gray-400 py-8">No buildings found</td></tr>
               )}
             </tbody>
           </table>
@@ -88,15 +131,19 @@ export default function Buildings() {
         {/* Mobile card list */}
         <div className="sm:hidden divide-y divide-gray-100">
           {filtered.map((b) => (
-            <div key={b.id} className="p-4 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="font-medium text-gray-800">{b.name}</div>
-                <div className="text-sm text-gray-500 mt-0.5">{b.address}</div>
-                <div className="text-xs text-gray-400 mt-1">{b.totalFlats} flats {b.propertyType ? `· ${b.propertyType}` : ''}</div>
+            <div key={b.id} className={`p-4 flex items-start justify-between gap-3 ${bulk.isSelected(b.id) ? 'bg-brand-50/40' : ''}`}>
+              <div className="flex items-start gap-3 min-w-0">
+                <input type="checkbox" className="mt-1" checked={bulk.isSelected(b.id)} onChange={() => bulk.toggle(b.id)} />
+                <div className="min-w-0">
+                  <div className="text-[10px] font-mono text-gray-400">{b.displayId ?? '—'}</div>
+                  <div className="font-medium text-gray-800">{b.name}</div>
+                  <div className="text-sm text-gray-500 mt-0.5">{b.address}</div>
+                  <div className="text-xs text-gray-400 mt-1">{b.totalFlats} flats {b.propertyType ? `· ${b.propertyType}` : ''}</div>
+                </div>
               </div>
               <div className="flex items-center shrink-0 gap-1">
                 <button onClick={() => openEdit(b)} className="icon-btn text-brand-500"><Pencil size={18} /></button>
-                <button onClick={() => remove(b.id)} className="icon-btn text-red-400"><Trash2 size={18} /></button>
+                <button onClick={() => setConfirmDeleteId(b.id!)} className="icon-btn text-red-400"><Trash2 size={18} /></button>
               </div>
             </div>
           ))}
@@ -110,6 +157,7 @@ export default function Buildings() {
 
       <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'Edit Building' : 'Add Building'}>
         <div className="space-y-3">
+          {form.displayId && <div className="text-xs font-mono text-gray-400">{form.displayId}</div>}
           <div><label className="label">Building Name</label>
             <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
           <div><label className="label">Address</label>
@@ -148,6 +196,30 @@ export default function Buildings() {
           </div>
         </div>
       </Modal>
+
+      <BulkAddModal<BulkRow>
+        open={bulkOpen} onClose={() => setBulkOpen(false)} title="Bulk Add Buildings" entityLabel="building"
+        fields={bulkFields} makeEmptyRow={bulkEmptyRow}
+        isRowBlank={(r) => !r.name.trim() && !r.address.trim()}
+        onCommit={bulkCommit}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        title="Delete this building?"
+        message="This cannot be undone. Flats, residents, and records linked to this building will remain but no longer reference a valid building."
+        confirmLabel="Delete"
+        onConfirm={() => { if (confirmDeleteId !== null) remove(confirmDeleteId); setConfirmDeleteId(null); }}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${bulk.count} building${bulk.count === 1 ? '' : 's'}?`}
+        message="This cannot be undone. Flats, residents, and records linked to these buildings will remain but no longer reference a valid building."
+        confirmLabel="Delete All Selected"
+        onConfirm={bulkDelete}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
     </div>
   );
 }

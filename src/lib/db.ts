@@ -5,6 +5,13 @@ import type {
   Tenancy, Ownership, Contact, EmergencyContact, Vehicle, ParkingSpace,
 } from '@/types';
 import { base64ToBlob } from '@/lib/fileValidation';
+import { formatDisplayId, trailingNumber, type SequencedEntity } from '@/lib/idPrefixes';
+
+/** One row per entity in ID_PREFIXES - tracks the last number handed out, so every new record gets a unique, sequential, human-readable ID (see lib/ids.ts). */
+export interface SequenceCounter {
+  entity: string; // primary key - one of the SequencedEntity keys
+  value: number;
+}
 
 export class PropentraDB extends Dexie {
   buildings!: Table<Building, number>;
@@ -27,6 +34,7 @@ export class PropentraDB extends Dexie {
   emergencyContacts!: Table<EmergencyContact, number>;
   vehicles!: Table<Vehicle, number>;
   parkingSpaces!: Table<ParkingSpace, number>;
+  sequences!: Table<SequenceCounter, string>;
 
   constructor() {
     // The physical IndexedDB name is intentionally left as-is even after the
@@ -247,6 +255,71 @@ export class PropentraDB extends Dexie {
       vehicles: '++id, residentId, flatId, buildingId, plate, status',
       parkingSpaces: '++id, buildingId, flatId, residentId, status',
     });
+
+    // v8: human-readable, sequential display IDs for every entity (e.g.
+    // "BLDG-0001", "P-00001", "TEN-00001") - the same style used by
+    // industry-standard property management exports - plus the `sequences`
+    // table that hands out the next number for each entity (see lib/ids.ts).
+    // Backfills every existing record in creation (id) order so nothing
+    // already saved is left without an ID; a building/flat/resident that
+    // already has an `externalId` (from a prior import) keeps that exact
+    // value as its displayId instead of getting a new one, and each
+    // entity's counter is initialized high enough that new records never
+    // collide with a backfilled or externally-sourced ID.
+    this.version(8)
+      .stores({
+        buildings: '++id, name, externalId, displayId',
+        flats: '++id, buildingId, unitNo, occupancyStatus, lifecycleStatus, externalId, displayId',
+        residents: '++id, name, buildingId, flatId, type, status, externalId, displayId',
+        bills: '++id, invoiceNo, buildingId, flatId, residentId, status, billingMonth',
+        receipts: '++id, receiptNo, invoiceId, residentId, voided',
+        payments: '++id, invoiceId, residentId, date, voided, tenancyId, displayId',
+        settings: '++id',
+        depositTransactions: '++id, residentId, buildingId, flatId, type, date, displayId',
+        maintenanceRequests: '++id, buildingId, flatId, status, priority, reportedDate, displayId',
+        expenses: '++id, buildingId, flatId, category, date, displayId',
+        reminders: '++id, dueDate, status, priority, linkType, linkId, displayId',
+        documents: '++id, linkType, linkId, buildingId, flatId, residentId, category, expiryDate, displayId',
+        auditLog: '++id, entityType, entityId, action, timestamp, residentId',
+        importTemplates: '++id, entity',
+        tenancies: '++id, residentId, flatId, buildingId, occupancyStatus, leaseEnd, displayId',
+        ownerships: '++id, residentId, flatId, buildingId, status, displayId',
+        contacts: '++id, residentId, type, displayId',
+        emergencyContacts: '++id, residentId, isPrimary, displayId',
+        vehicles: '++id, residentId, flatId, buildingId, plate, status, displayId',
+        parkingSpaces: '++id, buildingId, flatId, residentId, status, displayId',
+        sequences: 'entity',
+      })
+      .upgrade(async (tx) => {
+        const specs: { table: SequencedEntity; useExternalId?: boolean }[] = [
+          { table: 'buildings', useExternalId: true },
+          { table: 'flats', useExternalId: true },
+          { table: 'residents', useExternalId: true },
+          { table: 'tenancies' }, { table: 'ownerships' }, { table: 'contacts' },
+          { table: 'emergencyContacts' }, { table: 'vehicles' }, { table: 'parkingSpaces' },
+          { table: 'payments' }, { table: 'depositTransactions' }, { table: 'maintenanceRequests' },
+          { table: 'expenses' }, { table: 'reminders' }, { table: 'documents' },
+        ];
+        for (const spec of specs) {
+          const rows = await tx.table(spec.table).orderBy('id').toArray();
+          let counter = 0;
+          for (const row of rows) {
+            let displayId: string | undefined = row.displayId;
+            if (!displayId && spec.useExternalId && row.externalId) displayId = row.externalId;
+            if (!displayId) {
+              counter += 1;
+              displayId = formatDisplayId(spec.table, counter);
+            } else {
+              const n = trailingNumber(displayId);
+              if (n !== undefined && n > counter) counter = n;
+            }
+            if (displayId !== row.displayId) {
+              await tx.table(spec.table).update(row.id, { displayId });
+            }
+          }
+          await tx.table('sequences').put({ entity: spec.table, value: counter });
+        }
+      });
   }
 }
 

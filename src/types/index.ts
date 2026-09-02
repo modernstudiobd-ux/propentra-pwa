@@ -27,6 +27,7 @@ export interface Building {
   createdAt?: string; // ISO datetime
   updatedAt?: string; // ISO datetime
   externalId?: string; // source record ID from an imported file (e.g. "BLDG-0001") - lets later sheets in the same workbook reference this record by ID instead of name
+  displayId?: string; // human-readable record ID shown throughout the UI (e.g. "BLDG-0001") - auto-generated, or copied from externalId when this record came from an import
 }
 
 export const UNIT_TYPES = ['Studio', '1 Bedroom', '2 Bedroom', '3 Bedroom', '4+ Bedroom', 'Commercial', 'Other'] as const;
@@ -49,6 +50,7 @@ export interface Flat {
   parkingIncluded?: boolean;
   storageIncluded?: boolean;
   externalId?: string; // source record ID from an imported file (e.g. "UNIT-0001")
+  displayId?: string; // human-readable record ID shown throughout the UI (e.g. "UNIT-0001")
 }
 
 export type ResidentType = 'Tenant' | 'Owner';
@@ -111,6 +113,7 @@ export interface Resident {
   archived?: boolean;
   archivedAt?: string;
   externalId?: string; // source record ID from an imported file (e.g. "P-00001")
+  displayId?: string; // human-readable record ID shown throughout the UI (e.g. "P-00001")
 }
 
 export interface ChargeLine {
@@ -164,6 +167,7 @@ export interface Receipt {
 
 export interface Payment {
   id?: number;
+  displayId?: string; // human-readable record ID (e.g. "PAY-00001")
   date: string;
   invoiceId: number;
   receiptId?: number; // links back to the Receipt created alongside this payment
@@ -190,6 +194,7 @@ export type DepositTransactionType = 'collected' | 'applied' | 'refunded' | 'adj
 
 export interface DepositTransaction {
   id?: number;
+  displayId?: string; // human-readable record ID (e.g. "DEP-00001")
   residentId: number;
   buildingId: number;
   flatId: number;
@@ -213,6 +218,7 @@ export type MaintenanceStatus = 'open' | 'in_progress' | 'completed' | 'cancelle
 
 export interface MaintenanceRequest {
   id?: number;
+  displayId?: string; // human-readable record ID (e.g. "MAINT-00001")
   buildingId: number;
   flatId?: number; // optional - building-wide issues (e.g. roof, lobby) have no flat
   title: string;
@@ -236,6 +242,7 @@ export const EXPENSE_CATEGORIES = [
 
 export interface Expense {
   id?: number;
+  displayId?: string; // human-readable record ID (e.g. "EXP-00001")
   buildingId: number;
   flatId?: number;
   category: string;
@@ -254,6 +261,7 @@ export type ReminderLinkType = 'building' | 'flat' | 'resident' | 'none';
 
 export interface Reminder {
   id?: number;
+  displayId?: string; // human-readable record ID (e.g. "REM-00001")
   title: string;
   notes?: string;
   dueDate: string; // ISO
@@ -272,6 +280,7 @@ export const DOCUMENT_CATEGORIES = [
 
 export interface DocumentRecord {
   id?: number;
+  displayId?: string; // human-readable record ID (e.g. "DOC-00001")
   title: string;
   category: string;
   linkType: 'building' | 'flat' | 'resident' | 'none';
@@ -334,6 +343,7 @@ export const TENANCY_OCCUPANCY_STATUSES = ['upcoming', 'active', 'ended'] as con
 
 export interface Tenancy {
   id?: number;
+  displayId?: string; // human-readable record ID (e.g. "TEN-00001")
   residentId: number;
   flatId: number;
   buildingId: number;
@@ -357,6 +367,7 @@ export const OWNERSHIP_STATUSES = ['active', 'former'] as const;
 
 export interface Ownership {
   id?: number;
+  displayId?: string; // human-readable record ID (e.g. "OWN-00001")
   residentId: number;
   flatId: number;
   buildingId: number;
@@ -373,6 +384,7 @@ export const CONTACT_TYPES = ['Personal', 'Business', 'Guarantor', 'Agent', 'Oth
 
 export interface Contact {
   id?: number;
+  displayId?: string; // human-readable record ID (e.g. "CONT-00001")
   residentId: number;
   type: string; // 'Personal' | 'Business' | 'Guarantor' | 'Agent' | 'Other'
   name: string;
@@ -386,6 +398,7 @@ export interface Contact {
 
 export interface EmergencyContact {
   id?: number;
+  displayId?: string; // human-readable record ID (e.g. "EC-00001")
   residentId: number;
   name: string;
   relationship: string;
@@ -401,6 +414,7 @@ export const VEHICLE_STATUSES = ['active', 'inactive'] as const;
 
 export interface Vehicle {
   id?: number;
+  displayId?: string; // human-readable record ID (e.g. "VEH-00001")
   residentId: number;
   flatId: number;
   buildingId: number;
@@ -420,6 +434,7 @@ export const PARKING_STATUSES = ['assigned', 'vacant', 'reserved'] as const;
 
 export interface ParkingSpace {
   id?: number;
+  displayId?: string; // human-readable record ID (e.g. "PK-00001")
   buildingId: number;
   flatId?: number;
   residentId?: number;

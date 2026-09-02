@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { genReceiptNo } from '@/lib/billing';
 import { logAudit } from '@/lib/audit';
+import { nextDisplayId } from '@/lib/ids';
 import type { Resident, Bill, DepositTransaction } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -28,10 +29,11 @@ function validateAmount(amount: number) {
 
 export async function collectDeposit(resident: Resident, amount: number, notes?: string) {
   validateAmount(amount);
-  await db.transaction('rw', [db.depositTransactions, db.auditLog], async () => {
+  await db.transaction('rw', [db.depositTransactions, db.auditLog, db.sequences], async () => {
     const txnId = await db.depositTransactions.add({
       residentId: resident.id!, buildingId: resident.buildingId, flatId: resident.flatId,
       type: 'collected', amount, date: todayISO(), notes, voided: false,
+      displayId: await nextDisplayId('depositTransactions'),
     });
     await logAudit({
       action: 'deposit_collected', entityType: 'deposit', entityId: txnId as number,
@@ -60,7 +62,7 @@ export async function applyDepositToBill(resident: Resident, bill: Bill, amount:
     throw new DepositError(`Amount exceeds the invoice's remaining balance (${due.toFixed(2)}).`);
   }
 
-  return db.transaction('rw', [db.bills, db.receipts, db.payments, db.depositTransactions, db.settings, db.auditLog], async () => {
+  return db.transaction('rw', [db.bills, db.receipts, db.payments, db.depositTransactions, db.settings, db.auditLog, db.sequences], async () => {
     const freshBill = await db.bills.get(bill.id!);
     if (!freshBill) throw new DepositError('Invoice no longer exists.');
 
@@ -96,12 +98,14 @@ export async function applyDepositToBill(resident: Resident, bill: Bill, amount:
       amount,
       type: status === 'paid' ? 'Full' : 'Partial',
       voided: false,
+      displayId: await nextDisplayId('payments'),
     });
 
     const txnId = await db.depositTransactions.add({
       residentId: resident.id!, buildingId: resident.buildingId, flatId: resident.flatId,
       type: 'applied', amount, date: todayISO(), invoiceId: freshBill.id!,
       notes: `Applied to invoice ${freshBill.invoiceNo}`, voided: false,
+      displayId: await nextDisplayId('depositTransactions'),
     });
 
     await logAudit({
@@ -120,10 +124,11 @@ export async function refundDeposit(resident: Resident, amount: number, notes?: 
   if (Math.round((amount - balance) * 100) / 100 > 0) {
     throw new DepositError(`Amount exceeds the available deposit balance (${balance.toFixed(2)}).`);
   }
-  await db.transaction('rw', [db.depositTransactions, db.auditLog], async () => {
+  await db.transaction('rw', [db.depositTransactions, db.auditLog, db.sequences], async () => {
     const txnId = await db.depositTransactions.add({
       residentId: resident.id!, buildingId: resident.buildingId, flatId: resident.flatId,
       type: 'refunded', amount, date: todayISO(), notes, voided: false,
+      displayId: await nextDisplayId('depositTransactions'),
     });
     await logAudit({
       action: 'deposit_refunded', entityType: 'deposit', entityId: txnId as number,
@@ -144,10 +149,11 @@ export async function adjustDeposit(resident: Resident, amount: number, notes: s
   if (resultingBalance < 0) {
     throw new DepositError(`This adjustment would take the deposit balance negative (currently ${balance.toFixed(2)}). Enter a smaller deduction.`);
   }
-  await db.transaction('rw', [db.depositTransactions, db.auditLog], async () => {
+  await db.transaction('rw', [db.depositTransactions, db.auditLog, db.sequences], async () => {
     const txnId = await db.depositTransactions.add({
       residentId: resident.id!, buildingId: resident.buildingId, flatId: resident.flatId,
       type: 'adjustment', amount, date: todayISO(), notes, voided: false,
+      displayId: await nextDisplayId('depositTransactions'),
     });
     await logAudit({
       action: 'deposit_adjusted', entityType: 'deposit', entityId: txnId as number,

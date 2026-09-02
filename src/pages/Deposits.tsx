@@ -168,7 +168,9 @@ export default function Deposits() {
                 </div>
               </div>
               <div className="flex items-center justify-between gap-2 mt-0.5">
-                <div className="text-xs text-gray-400" title={t.voided ? t.voidReason : undefined}>{txnTypeLabel[t.type]} · {dateLabel(t.date)}{t.voided ? ' · Voided' : ''}</div>
+                <div className="text-xs text-gray-400" title={t.voided ? t.voidReason : undefined}>
+                  <span className="font-mono">{t.displayId ?? ''}</span>{t.displayId ? ' · ' : ''}{txnTypeLabel[t.type]} · {dateLabel(t.date)}{t.voided ? ' · Voided' : ''}
+                </div>
                 {!t.voided && t.type !== 'applied' && (
                   <button onClick={() => onVoidTxn(t)} className="text-gray-300 hover:text-red-500" title="Void"><Ban size={13} /></button>
                 )}

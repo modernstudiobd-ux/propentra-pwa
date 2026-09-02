@@ -2,8 +2,13 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel } from '@/lib/format';
-import { Plus, Pencil, Trash2, Search, Wrench } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Wrench, Layers } from 'lucide-react';
 import Modal from '@/components/Modal';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import BulkToolbar from '@/components/BulkToolbar';
+import BulkAddModal, { type BulkAddField } from '@/components/BulkAddModal';
+import { useBulkSelection } from '@/hooks/useBulkSelection';
+import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
 import type { MaintenanceRequest, MaintenancePriority, MaintenanceStatus } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -23,6 +28,8 @@ const STATUS_LABEL: Record<MaintenanceStatus, string> = {
   open: 'Open', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled',
 };
 
+interface BulkRow { title: string; priority: MaintenancePriority; vendorName: string; cost: number | '' }
+
 export default function Maintenance() {
   const requests = useLiveQuery(() => db.maintenanceRequests.orderBy('id').reverse().toArray(), []) ?? [];
   const buildings = useLiveQuery(() => db.buildings.toArray(), []) ?? [];
@@ -32,7 +39,10 @@ export default function Maintenance() {
   const [statusFilter, setStatusFilter] = useState<'all' | MaintenanceStatus>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | MaintenancePriority>('all');
   const [open, setOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [form, setForm] = useState<MaintenanceRequest>(emptyForm(buildings[0]?.id ?? 0));
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const buildingName = (id: number) => buildings.find((b) => b.id === id)?.name ?? '—';
   const flatLabel = (id?: number) => (id ? flats.find((f) => f.id === id)?.unitNo : null);
@@ -44,6 +54,8 @@ export default function Maintenance() {
     r.title.toLowerCase().includes(query.toLowerCase())
   );
 
+  const bulk = useBulkSelection(filtered);
+
   function openAdd() { setForm(emptyForm(buildings[0]?.id ?? 0)); setOpen(true); }
   function openEdit(r: MaintenanceRequest) { setForm(r); setOpen(true); }
 
@@ -51,14 +63,37 @@ export default function Maintenance() {
     if (!form.title.trim() || !form.buildingId) return;
     const payload = { ...form, completedDate: form.status === 'completed' ? (form.completedDate || todayISO()) : form.completedDate };
     if (form.id) await db.maintenanceRequests.update(form.id, payload);
-    else await db.maintenanceRequests.add(payload);
+    else await db.maintenanceRequests.add({ ...payload, displayId: await nextDisplayId('maintenanceRequests') });
     setOpen(false);
   }
 
-  async function remove(id?: number) {
-    if (!id) return;
-    if (!confirm('Delete this maintenance record?')) return;
+  async function remove(id: number) {
     await db.maintenanceRequests.delete(id);
+    setConfirmDeleteId(null);
+  }
+
+  async function bulkDelete() {
+    await db.maintenanceRequests.bulkDelete(bulk.selectedIds());
+    bulk.clear();
+    setConfirmBulkDelete(false);
+  }
+
+  const BULK_FIELDS: BulkAddField<BulkRow>[] = [
+    { key: 'title', label: 'Title', type: 'text', required: true, placeholder: 'e.g. Leaking pipe' },
+    { key: 'priority', label: 'Priority', type: 'select', options: ['low', 'medium', 'high', 'urgent'] },
+    { key: 'vendorName', label: 'Vendor', type: 'text' },
+    { key: 'cost', label: 'Cost', type: 'number' },
+  ];
+
+  async function commitBulkAdd(rows: BulkRow[]) {
+    const buildingId = buildings[0]?.id;
+    if (!buildingId) return;
+    const ids = await nextDisplayIds('maintenanceRequests', rows.length);
+    await db.maintenanceRequests.bulkAdd(rows.map((r, i) => ({
+      buildingId, flatId: undefined, title: r.title.trim(), description: '', priority: r.priority, status: 'open' as MaintenanceStatus,
+      vendorName: r.vendorName.trim(), vendorContact: '', cost: r.cost === '' ? 0 : Number(r.cost),
+      reportedDate: todayISO(), completedDate: '', notes: '', displayId: ids[i],
+    })));
   }
 
   return (
@@ -84,18 +119,27 @@ export default function Maintenance() {
             <option value="urgent">Urgent</option>
           </select>
         </div>
-        <button onClick={openAdd} className="btn-primary flex items-center gap-2 justify-center shrink-0" disabled={buildings.length === 0}>
-          <Plus size={16} /> Log Maintenance
-        </button>
+        <div className="flex gap-2 shrink-0">
+          <button onClick={() => setBulkOpen(true)} className="btn-secondary flex items-center gap-2 justify-center" disabled={buildings.length === 0}>
+            <Layers size={16} /> Bulk Add
+          </button>
+          <button onClick={openAdd} className="btn-primary flex items-center gap-2 justify-center" disabled={buildings.length === 0}>
+            <Plus size={16} /> Log Maintenance
+          </button>
+        </div>
       </div>
+
+      <BulkToolbar count={bulk.count} onDelete={() => setConfirmBulkDelete(true)} onClear={bulk.clear} />
 
       <div className="card overflow-hidden divide-y divide-gray-100">
         {filtered.map((r) => (
-          <div key={r.id} className="p-4 flex items-start justify-between gap-3">
+          <div key={r.id} className={`p-4 flex items-start justify-between gap-3 ${bulk.isSelected(r.id) ? 'bg-brand-50/40' : ''}`}>
             <div className="min-w-0 flex items-start gap-3">
+              <input type="checkbox" className="mt-1" checked={bulk.isSelected(r.id)} onChange={() => bulk.toggle(r.id)} />
               <Wrench size={16} className="text-gray-300 mt-0.5 shrink-0" />
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] text-gray-400 font-mono">{r.displayId ?? '—'}</span>
                   <span className="font-medium text-gray-800">{r.title}</span>
                   <span className={PRIORITY_BADGE[r.priority]}>{r.priority}</span>
                   <span className={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</span>
@@ -110,7 +154,7 @@ export default function Maintenance() {
             <div className="flex items-center shrink-0 gap-2">
               {r.cost ? <span className="text-sm font-semibold text-gray-800">{money(r.cost)}</span> : null}
               <button onClick={() => openEdit(r)} className="icon-btn text-brand-500"><Pencil size={16} /></button>
-              <button onClick={() => remove(r.id)} className="icon-btn text-red-400"><Trash2 size={16} /></button>
+              <button onClick={() => setConfirmDeleteId(r.id!)} className="icon-btn text-red-400"><Trash2 size={16} /></button>
             </div>
           </div>
         ))}
@@ -168,6 +212,32 @@ export default function Maintenance() {
           </div>
         </div>
       </Modal>
+
+      <BulkAddModal<BulkRow>
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        title={`Bulk Log Maintenance${buildings[0] ? ` — ${buildings[0].name}` : ''}`}
+        entityLabel="maintenance record"
+        fields={BULK_FIELDS}
+        makeEmptyRow={() => ({ title: '', priority: 'medium', vendorName: '', cost: '' })}
+        isRowBlank={(r) => !r.title.trim()}
+        onCommit={commitBulkAdd}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        title="Delete this maintenance record?"
+        message="This cannot be undone."
+        onConfirm={() => confirmDeleteId !== null && remove(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${bulk.count} maintenance record${bulk.count === 1 ? '' : 's'}?`}
+        message="This cannot be undone."
+        onConfirm={bulkDelete}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
     </div>
   );
 }

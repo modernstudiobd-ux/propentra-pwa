@@ -4,8 +4,12 @@ import { db } from '@/lib/db';
 import { dateLabel } from '@/lib/format';
 import { validateFileContent } from '@/lib/fileValidation';
 import { logAudit } from '@/lib/audit';
+import { nextDisplayId } from '@/lib/ids';
 import { Plus, Trash2, Search, FolderOpen, Download, AlertTriangle } from 'lucide-react';
 import Modal from '@/components/Modal';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import BulkToolbar from '@/components/BulkToolbar';
+import { useBulkSelection } from '@/hooks/useBulkSelection';
 import type { DocumentRecord } from '@/types';
 import { DOCUMENT_CATEGORIES } from '@/types';
 
@@ -33,6 +37,8 @@ export default function Documents() {
   const [fileErr, setFileErr] = useState<string | null>(null);
   const [fileChecking, setFileChecking] = useState(false);
   const [pendingFile, setPendingFile] = useState<{ data: Blob; name: string; type: string; size: number } | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   function linkLabel(d: DocumentRecord) {
     if (d.linkType === 'building') return buildings.find((b) => b.id === d.linkId)?.name ?? '—';
@@ -45,6 +51,8 @@ export default function Documents() {
     (categoryFilter === 'all' || d.category === categoryFilter) &&
     d.title.toLowerCase().includes(query.toLowerCase())
   );
+
+  const bulk = useBulkSelection(filtered);
 
   function openAdd() { setForm(emptyForm()); setPendingFile(null); setFileErr(null); setOpen(true); }
 
@@ -81,6 +89,7 @@ export default function Documents() {
       residentId: form.linkType === 'resident' ? form.linkId : undefined,
       fileData: pendingFile.data, fileName: pendingFile.name, fileType: pendingFile.type, fileSize: pendingFile.size,
       uploadDate: todayISO(), expiryDate: form.expiryDate || undefined, notes: form.notes,
+      displayId: await nextDisplayId('documents'),
     });
     await logAudit({
       action: 'document_uploaded', entityType: 'document', entityId: newId as number,
@@ -90,16 +99,30 @@ export default function Documents() {
     setOpen(false);
   }
 
-  async function remove(id?: number) {
-    if (!id) return;
+  async function remove(id: number) {
     const doc = documents.find((d) => d.id === id);
-    if (!confirm('Delete this document?')) return;
     await db.documents.delete(id);
     await logAudit({
       action: 'document_deleted', entityType: 'document', entityId: id,
       buildingId: doc?.buildingId,
       summary: `Deleted document "${doc?.title ?? '#' + id}"`,
     });
+    setConfirmDeleteId(null);
+  }
+
+  async function bulkDelete() {
+    const ids = bulk.selectedIds();
+    for (const id of ids) {
+      const doc = documents.find((d) => d.id === id);
+      await db.documents.delete(id);
+      await logAudit({
+        action: 'document_deleted', entityType: 'document', entityId: id,
+        buildingId: doc?.buildingId,
+        summary: `Deleted document "${doc?.title ?? '#' + id}" (bulk delete of ${ids.length})`,
+      });
+    }
+    bulk.clear();
+    setConfirmBulkDelete(false);
   }
 
   function download(d: DocumentRecord) {
@@ -134,15 +157,19 @@ export default function Documents() {
         </button>
       </div>
 
+      <BulkToolbar count={bulk.count} onDelete={() => setConfirmBulkDelete(true)} onClear={bulk.clear} />
+
       <div className="card overflow-hidden divide-y divide-gray-100">
         {filtered.map((d) => {
           const expiring = d.expiryDate ? daysUntil(d.expiryDate) : null;
           return (
-            <div key={d.id} className="p-4 flex items-start justify-between gap-3">
+            <div key={d.id} className={`p-4 flex items-start justify-between gap-3 ${bulk.isSelected(d.id) ? 'bg-brand-50/40' : ''}`}>
               <div className="min-w-0 flex items-start gap-3">
+                <input type="checkbox" className="mt-1" checked={bulk.isSelected(d.id)} onChange={() => bulk.toggle(d.id)} />
                 <FolderOpen size={16} className="text-gray-300 mt-0.5 shrink-0" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] text-gray-400 font-mono">{d.displayId ?? '—'}</span>
                     <span className="font-medium text-gray-800">{d.title}</span>
                     <span className="badge-partial">{d.category}</span>
                     {expiring !== null && expiring <= 30 && (
@@ -159,7 +186,7 @@ export default function Documents() {
               </div>
               <div className="flex items-center shrink-0 gap-1">
                 <button onClick={() => download(d)} className="icon-btn text-brand-500"><Download size={16} /></button>
-                <button onClick={() => remove(d.id)} className="icon-btn text-red-400"><Trash2 size={16} /></button>
+                <button onClick={() => setConfirmDeleteId(d.id!)} className="icon-btn text-red-400"><Trash2 size={16} /></button>
               </div>
             </div>
           );
@@ -209,6 +236,21 @@ export default function Documents() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        title="Delete this document?"
+        message="This cannot be undone."
+        onConfirm={() => confirmDeleteId !== null && remove(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${bulk.count} document${bulk.count === 1 ? '' : 's'}?`}
+        message="This cannot be undone."
+        onConfirm={bulkDelete}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
     </div>
   );
 }

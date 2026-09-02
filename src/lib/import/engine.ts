@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
+import { nextDisplayId, reserveDisplayId } from '@/lib/ids';
 import { normalizeHeader, type ImportEntityDef, type ImportEntityKey, type ImportFieldDef } from './schemas';
 
 export type DuplicateDecision = 'skip' | 'update' | 'create';
@@ -368,7 +369,7 @@ export async function commitImport(def: ImportEntityDef, rows: ProcessedRow[]): 
   try {
     await db.transaction(
       'rw',
-      [db.buildings, db.flats, db.residents, db.expenses, db.auditLog,
+      [db.buildings, db.flats, db.residents, db.expenses, db.auditLog, db.sequences,
        db.tenancies, db.ownerships, db.contacts, db.emergencyContacts, db.vehicles, db.parkingSpaces],
       async () => {
       for (const row of rows) {
@@ -393,7 +394,8 @@ export async function commitImport(def: ImportEntityDef, rows: ProcessedRow[]): 
             const cacheKey = normalizeHeader(bRef.raw);
             let id = buildingCache.get(cacheKey);
             if (id === undefined) {
-              id = (await db.buildings.add({ name: bRef.raw, address: '', totalFlats: 0 })) as number;
+              const displayId = await nextDisplayId('buildings');
+              id = (await db.buildings.add({ name: bRef.raw, address: '', totalFlats: 0, displayId })) as number;
               buildingCache.set(cacheKey, id);
             }
             idOverrides.buildingRef = id;
@@ -408,7 +410,8 @@ export async function commitImport(def: ImportEntityDef, rows: ProcessedRow[]): 
             const cacheKey = `${idOverrides.buildingRef}::${normalizeHeader(fRef.raw)}`;
             let id = flatCache.get(cacheKey);
             if (id === undefined) {
-              id = (await db.flats.add({ buildingId: idOverrides.buildingRef, unitNo: fRef.raw, occupancyStatus: 'vacant', lifecycleStatus: 'active' })) as number;
+              const displayId = await nextDisplayId('flats');
+              id = (await db.flats.add({ buildingId: idOverrides.buildingRef, unitNo: fRef.raw, occupancyStatus: 'vacant', lifecycleStatus: 'active', displayId })) as number;
               flatCache.set(cacheKey, id);
             }
             idOverrides.flatRef = id;
@@ -462,6 +465,26 @@ export async function commitImport(def: ImportEntityDef, rows: ProcessedRow[]): 
             flatId: finalRecord.flatId,
             unitLabel: flat?.unitNo ?? matchedResident.unitLabel,
           });
+        }
+
+        // Every entity gets a human-readable display ID (see lib/ids.ts).
+        // If the sheet supplied its own ID (mapped to `externalId` for
+        // buildings/flats/residents, or `displayId` for every other
+        // entity - see schemas.ts), that exact value is used and the
+        // entity's counter is bumped past it so future auto-generated IDs
+        // never collide with it. Otherwise a new one is allocated.
+        const sourceId: string | undefined = finalRecord.displayId || finalRecord.externalId || undefined;
+        if (sourceId) {
+          finalRecord.displayId = sourceId;
+          await reserveDisplayId(def.key, sourceId);
+        } else if (!row.duplicate || row.decision !== 'update') {
+          // Only generate a brand-new ID for CREATE rows - an UPDATE row
+          // with no ID of its own must never overwrite the existing
+          // record's displayId, so `displayId` is simply left off the
+          // partial update payload.
+          finalRecord.displayId = await nextDisplayId(def.key);
+        } else {
+          delete finalRecord.displayId;
         }
 
         if (row.duplicate && row.decision === 'update') {

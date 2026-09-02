@@ -5,6 +5,7 @@ import {
   Building2, CheckCircle2, ChevronRight, ChevronLeft, Landmark, Home, UserPlus, Wallet, SkipForward,
 } from 'lucide-react';
 import type { ResidentType } from '@/types';
+import { nextDisplayId } from '@/lib/ids';
 
 const CURRENCY_PRESETS = [
   { symbol: '$', name: 'US Dollars' },
@@ -77,14 +78,14 @@ export default function SetupWizard({ onFinish }: { onFinish: () => void }) {
 
   async function saveBuildingAndNext() {
     if (!buildingName.trim()) { next(); return; }
-    const id = await db.buildings.add({ name: buildingName, address: buildingAddress, totalFlats: totalFlats || 0 });
+    const id = await db.buildings.add({ name: buildingName, address: buildingAddress, totalFlats: totalFlats || 0, displayId: await nextDisplayId('buildings') });
     setCreatedBuildingId(id as number);
     next();
   }
 
   async function saveFlatAndNext() {
     if (!unitNo.trim() || !createdBuildingId) { next(); return; }
-    const id = await db.flats.add({ buildingId: createdBuildingId, unitNo, occupancyStatus: 'vacant', lifecycleStatus: 'active' });
+    const id = await db.flats.add({ buildingId: createdBuildingId, unitNo, occupancyStatus: 'vacant', lifecycleStatus: 'active', displayId: await nextDisplayId('flats') });
     setCreatedFlatId(id as number);
     next();
   }
@@ -96,6 +97,7 @@ export default function SetupWizard({ onFinish }: { onFinish: () => void }) {
         name: residentName, mobile: residentMobile, email: '',
         flatId: createdFlatId, buildingId: createdBuildingId, unitLabel: flat?.unitNo ?? unitNo, type: residentType,
         status: 'current', moveInDate: new Date().toISOString().slice(0, 10), isBillingContact: true,
+        displayId: await nextDisplayId('residents'),
       });
       await db.flats.update(createdFlatId, { occupancyStatus: 'occupied' });
     }

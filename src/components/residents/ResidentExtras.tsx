@@ -4,6 +4,7 @@ import { Plus, Pencil, Trash2, Home, Landmark, Users, Car, ShieldAlert, X } from
 import { db } from '@/lib/db';
 import { dateLabel, money } from '@/lib/format';
 import { logAudit } from '@/lib/audit';
+import { nextDisplayId } from '@/lib/ids';
 import { validateOwnershipPct } from '@/lib/ownership';
 import { suggestRentForFlat } from '@/lib/tenancy';
 import {
@@ -48,7 +49,7 @@ function TenancyPanel({ residentId, flatId, buildingId }: { residentId: number; 
       await db.tenancies.update(editing.id, editing);
       await logAudit({ action: 'tenancy_updated', entityType: 'tenancy', entityId: editing.id, residentId, buildingId, flatId, summary: `Updated tenancy for resident #${residentId}` });
     } else {
-      const id = (await db.tenancies.add(editing)) as number;
+      const id = (await db.tenancies.add({ ...editing, displayId: await nextDisplayId('tenancies') })) as number;
       await logAudit({ action: 'tenancy_created', entityType: 'tenancy', entityId: id, residentId, buildingId, flatId, summary: `Created tenancy for resident #${residentId}` });
     }
     setEditing(null);
@@ -67,6 +68,7 @@ function TenancyPanel({ residentId, flatId, buildingId }: { residentId: number; 
           <div key={t.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
             <div>
               <span className={t.occupancyStatus === 'active' ? 'badge-paid' : t.occupancyStatus === 'upcoming' ? 'badge-partial' : 'badge-unpaid'}>{t.occupancyStatus}</span>
+              <span className="ml-2 text-[10px] text-gray-400 font-mono">{t.displayId ?? ''}</span>
               <span className="ml-2 text-gray-700">{money(t.monthlyRent)}/{t.paymentFrequency?.toLowerCase()}</span>
               <div className="text-[11px] text-gray-400">{dateLabel(t.leaseStart)} → {t.leaseEnd ? dateLabel(t.leaseEnd) : 'Ongoing'} · {t.leaseType}</div>
             </div>
@@ -148,7 +150,7 @@ function OwnershipPanel({ residentId, flatId, buildingId }: { residentId: number
       await db.ownerships.update(editing.id, editing);
       await logAudit({ action: 'ownership_updated', entityType: 'ownership', entityId: editing.id, residentId, buildingId, flatId, summary: `Updated ownership for resident #${residentId}` });
     } else {
-      const id = (await db.ownerships.add(editing)) as number;
+      const id = (await db.ownerships.add({ ...editing, displayId: await nextDisplayId('ownerships') })) as number;
       await logAudit({ action: 'ownership_created', entityType: 'ownership', entityId: id, residentId, buildingId, flatId, summary: `Created ownership for resident #${residentId}` });
     }
     setEditing(null);
@@ -168,6 +170,7 @@ function OwnershipPanel({ residentId, flatId, buildingId }: { residentId: number
           <div key={o.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2 text-sm">
             <div>
               <span className={o.status === 'active' ? 'badge-paid' : 'badge-unpaid'}>{o.status}</span>
+              <span className="ml-2 text-[10px] text-gray-400 font-mono">{o.displayId ?? ''}</span>
               <span className="ml-2 text-gray-700">{o.ownershipPct}% · {o.ownershipType}</span>
               <div className="text-[11px] text-gray-400">Purchased {dateLabel(o.purchaseDate)}</div>
             </div>
@@ -224,13 +227,13 @@ function ContactsPanel({ residentId }: { residentId: number }) {
   async function saveContact() {
     if (!newContact || !newContact.name.trim()) return;
     if (newContact.preferred) await db.contacts.where('residentId').equals(residentId).modify({ preferred: false });
-    await db.contacts.add(newContact);
+    await db.contacts.add({ ...newContact, displayId: await nextDisplayId('contacts') });
     setNewContact(null);
   }
   async function saveEmergency() {
     if (!newEmergency || !newEmergency.name.trim() || !newEmergency.phone.trim()) return;
     if (newEmergency.isPrimary) await db.emergencyContacts.where('residentId').equals(residentId).modify({ isPrimary: false });
-    await db.emergencyContacts.add(newEmergency);
+    await db.emergencyContacts.add({ ...newEmergency, displayId: await nextDisplayId('emergencyContacts') });
     setNewEmergency(null);
   }
 
@@ -241,7 +244,7 @@ function ContactsPanel({ residentId }: { residentId: number }) {
           {contacts.map((c) => (
             <div key={c.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-1.5 text-sm">
               <div><span className="text-gray-700 font-medium">{c.name}</span> <span className="text-gray-400 text-xs">{c.type}{c.preferred ? ' · Preferred' : ''}</span>
-                <div className="text-[11px] text-gray-400">{[c.phone, c.email, c.relationship].filter(Boolean).join(' · ')}</div></div>
+                <div className="text-[11px] text-gray-400">{c.displayId ? `${c.displayId} · ` : ''}{[c.phone, c.email, c.relationship].filter(Boolean).join(' · ')}</div></div>
               <button onClick={() => db.contacts.delete(c.id!)} className="icon-btn text-red-400"><Trash2 size={13} /></button>
             </div>
           ))}
@@ -271,7 +274,7 @@ function ContactsPanel({ residentId }: { residentId: number }) {
           {emergency.map((c) => (
             <div key={c.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-1.5 text-sm">
               <div><span className="text-gray-700 font-medium">{c.name}</span> <span className="text-gray-400 text-xs">{c.relationship}{c.isPrimary ? ' · Primary' : ''}</span>
-                <div className="text-[11px] text-gray-400">{[c.phone, c.email].filter(Boolean).join(' · ')}</div></div>
+                <div className="text-[11px] text-gray-400">{c.displayId ? `${c.displayId} · ` : ''}{[c.phone, c.email].filter(Boolean).join(' · ')}</div></div>
               <button onClick={() => db.emergencyContacts.delete(c.id!)} className="icon-btn text-red-400"><Trash2 size={13} /></button>
             </div>
           ))}
@@ -305,7 +308,7 @@ function VehiclesPanel({ residentId, flatId, buildingId }: { residentId: number;
   async function save() {
     if (!editing || !editing.plate.trim()) return;
     if (editing.id) await db.vehicles.update(editing.id, editing);
-    else await db.vehicles.add(editing);
+    else await db.vehicles.add({ ...editing, displayId: await nextDisplayId('vehicles') });
     setEditing(null);
   }
 
@@ -314,7 +317,8 @@ function VehiclesPanel({ residentId, flatId, buildingId }: { residentId: number;
       <div className="space-y-1.5">
         {vehicles.map((v) => (
           <div key={v.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-1.5 text-sm">
-            <div><span className="text-gray-700 font-medium">{v.plate}</span> <span className="text-gray-400 text-xs">{[v.type, v.make, v.model, v.year].filter(Boolean).join(' ')}</span></div>
+            <div><span className="text-gray-700 font-medium">{v.plate}</span> <span className="text-gray-400 text-xs">{[v.type, v.make, v.model, v.year].filter(Boolean).join(' ')}</span>
+              {v.displayId && <span className="block text-[10px] text-gray-400 font-mono">{v.displayId}</span>}</div>
             <div className="flex items-center gap-1">
               <span className={v.status === 'active' ? 'badge-paid' : 'badge-unpaid'}>{v.status}</span>
               <button onClick={() => db.vehicles.delete(v.id!)} className="icon-btn text-red-400"><Trash2 size={13} /></button>

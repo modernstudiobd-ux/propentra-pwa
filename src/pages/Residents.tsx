@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
-import { Plus, Pencil, Trash2, Search, IdCard, Wallet, Building2, Eye, EyeOff, Archive, ArchiveRestore } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, IdCard, Wallet, Building2, Eye, EyeOff, Archive, ArchiveRestore, Layers } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Modal from '@/components/Modal';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import BulkToolbar from '@/components/BulkToolbar';
+import BulkAddModal, { type BulkAddField } from '@/components/BulkAddModal';
+import { useBulkSelection } from '@/hooks/useBulkSelection';
 import { dateLabel } from '@/lib/format';
 import { validateImageFileContent, maskIdNumber } from '@/lib/fileValidation';
 import { logAudit } from '@/lib/audit';
+import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
 import ResidentExtras from '@/components/residents/ResidentExtras';
 import type { Resident, ResidentType, ResidentStatus } from '@/types';
 
@@ -42,6 +47,8 @@ function diffSummary(before: Resident, after: Resident): string {
   return `Changed: ${changed.map((f) => f.label).join(', ')}`;
 }
 
+interface BulkResidentRow { firstName: string; lastName: string; mobile: string; email: string; type: ResidentType; flatId: string }
+
 export default function Residents() {
   const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
@@ -52,12 +59,15 @@ export default function Residents() {
   const [statusFilter, setStatusFilter] = useState<'all' | ResidentStatus>('current');
   const [showArchived, setShowArchived] = useState(false);
   const [open, setOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [form, setForm] = useState<Resident>(emptyForm([]));
   const [revealId, setRevealId] = useState(false);
   const [revealDoc, setRevealDoc] = useState(false);
   const [idFileError, setIdFileError] = useState('');
   const [idFileChecking, setIdFileChecking] = useState(false);
   const [docPreviewUrl, setDocPreviewUrl] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   // Blobs can't be used directly as an <img src> - build/revoke an object
   // URL only while the document is actually being previewed, so we're never
@@ -90,6 +100,8 @@ export default function Residents() {
     (statusFilter === 'all' || statusOf(r) === statusFilter) &&
     (r.name.toLowerCase().includes(query.toLowerCase()) || r.email.toLowerCase().includes(query.toLowerCase()))
   );
+
+  const bulk = useBulkSelection(filtered);
 
   // Group filtered residents by flat, so multiple residents on one flat
   // (owner + tenant, or resident history) are visually grouped together
@@ -156,7 +168,7 @@ export default function Residents() {
       const others = residents.filter((r) => r.flatId === form.flatId && r.id !== form.id && isBillingContactOf(r));
       await Promise.all(others.map((r) => r.id && db.residents.update(r.id, { isBillingContact: false })));
     }
-    await db.transaction('rw', [db.residents, db.auditLog], async () => {
+    await db.transaction('rw', [db.residents, db.auditLog, db.sequences], async () => {
       if (form.id) {
         const before = residents.find((r) => r.id === form.id);
         await db.residents.update(form.id, form);
@@ -167,7 +179,8 @@ export default function Residents() {
           details: before ? diffSummary(before, form) : undefined,
         });
       } else {
-        const newId = await db.residents.add(form);
+        const displayId = await nextDisplayId('residents');
+        const newId = await db.residents.add({ ...form, displayId });
         await logAudit({
           action: 'resident_created', entityType: 'resident', entityId: newId as number,
           buildingId: form.buildingId, flatId: form.flatId, residentId: newId as number,
@@ -178,10 +191,8 @@ export default function Residents() {
     setOpen(false);
   }
 
-  async function remove(id?: number) {
-    if (!id) return;
+  async function remove(id: number) {
     const r = residents.find((x) => x.id === id);
-    if (!confirm('Permanently delete this resident? This cannot be undone - their billing/payment history will remain but no longer link to a name.\n\nConsider Archiving instead if you just want them out of the way while keeping the record.')) return;
     await db.transaction('rw', [db.residents, db.auditLog], async () => {
       await db.residents.delete(id);
       await logAudit({
@@ -190,6 +201,24 @@ export default function Residents() {
         summary: `Permanently deleted resident ${r?.name ?? '#' + id}`,
       });
     });
+    setConfirmDeleteId(null);
+  }
+
+  async function bulkDelete() {
+    const ids = bulk.selectedIds();
+    await db.transaction('rw', [db.residents, db.auditLog], async () => {
+      for (const id of ids) {
+        const r = residents.find((x) => x.id === id);
+        await db.residents.delete(id);
+        await logAudit({
+          action: 'resident_deleted', entityType: 'resident', entityId: id,
+          buildingId: r?.buildingId, flatId: r?.flatId, residentId: id,
+          summary: `Permanently deleted resident ${r?.name ?? '#' + id} (bulk delete of ${ids.length})`,
+        });
+      }
+    });
+    bulk.clear();
+    setConfirmBulkDelete(false);
   }
 
   async function archive(r: Resident) {
@@ -213,6 +242,38 @@ export default function Residents() {
         buildingId: r.buildingId, flatId: r.flatId, residentId: r.id,
         summary: `Unarchived resident ${r.name}`,
       });
+    });
+  }
+
+  const BULK_FIELDS: BulkAddField<BulkResidentRow>[] = [
+    { key: 'firstName', label: 'First Name', type: 'text', required: true, placeholder: 'Jane' },
+    { key: 'lastName', label: 'Last Name', type: 'text', placeholder: 'Doe' },
+    { key: 'mobile', label: 'Mobile', type: 'text' },
+    { key: 'email', label: 'Email', type: 'text' },
+    { key: 'type', label: 'Type', type: 'select', options: ['Tenant', 'Owner'] },
+    { key: 'flatId', label: 'Flat', type: 'select', options: flats.map((f) => ({ value: String(f.id), label: `${buildingName(f.buildingId)} · ${f.unitNo}` })), required: true },
+  ];
+
+  async function commitBulkAdd(rows: BulkResidentRow[]) {
+    const ids = await nextDisplayIds('residents', rows.length);
+    await db.transaction('rw', [db.residents, db.auditLog], async () => {
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const flat = flats.find((f) => f.id === Number(r.flatId));
+        if (!flat) continue;
+        const name = composeName(r.firstName, r.lastName);
+        const newId = await db.residents.add({
+          ...emptyForm(flats), name, firstName: r.firstName.trim(), lastName: r.lastName.trim(),
+          mobile: r.mobile.trim(), email: r.email.trim(), type: r.type,
+          flatId: flat.id!, buildingId: flat.buildingId, unitLabel: flat.unitNo,
+          displayId: ids[i],
+        });
+        await logAudit({
+          action: 'resident_created', entityType: 'resident', entityId: newId as number,
+          buildingId: flat.buildingId, flatId: flat.id, residentId: newId as number,
+          summary: `Added resident ${name} (${r.type}) via bulk add`,
+        });
+      }
     });
   }
 
@@ -242,14 +303,23 @@ export default function Residents() {
           </button>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <button
-            onClick={openAdd}
-            className="btn-primary flex items-center gap-2 justify-center"
-            disabled={flats.length === 0}
-            title={flats.length === 0 ? 'Add a flat first before adding residents' : undefined}
-          >
-            <Plus size={16} /> Add Resident
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setBulkOpen(true)}
+              className="btn-secondary flex items-center gap-2 justify-center"
+              disabled={flats.length === 0}
+            >
+              <Layers size={16} /> Bulk Add
+            </button>
+            <button
+              onClick={openAdd}
+              className="btn-primary flex items-center gap-2 justify-center"
+              disabled={flats.length === 0}
+              title={flats.length === 0 ? 'Add a flat first before adding residents' : undefined}
+            >
+              <Plus size={16} /> Add Resident
+            </button>
+          </div>
           {flats.length === 0 && (
             <span className="text-xs text-gray-400">
               No flats yet — <Link to="/flats" className="text-brand-500 hover:underline">add one first</Link>.
@@ -257,6 +327,8 @@ export default function Residents() {
           )}
         </div>
       </div>
+
+      <BulkToolbar count={bulk.count} onDelete={() => setConfirmBulkDelete(true)} onClear={bulk.clear} deleteLabel="Delete Selected (Permanent)" />
 
       <div className="space-y-3">
         {groups.map((g) => (
@@ -272,30 +344,34 @@ export default function Residents() {
               {g.residents.map((r) => {
                 const bal = depositBalance(r.id);
                 return (
-                  <div key={r.id} className={`p-4 flex items-start justify-between gap-3 ${r.archived ? 'opacity-60' : ''}`}>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-gray-800">{r.name}</span>
-                        <span className={r.type === 'Owner' ? 'badge-partial' : 'badge-paid'}>{r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}</span>
-                        <span className={statusOf(r) === 'current' ? 'badge-paid' : 'badge-unpaid'}>{statusOf(r) === 'current' ? 'Current' : 'Former'}</span>
-                        {r.archived && <span className="badge-partial">Archived</span>}
-                        {isBillingContactOf(r) && statusOf(r) === 'current' && (
-                          <span className="text-[10px] text-brand-500 font-medium">● billed</span>
-                        )}
-                        {r.idNumber && (
-                          <span title={`ID on file: ${maskIdNumber(r.idNumber)}`}>
-                            <IdCard size={13} className="text-gray-400" aria-label="ID on file" />
-                          </span>
+                  <div key={r.id} className={`p-4 flex items-start justify-between gap-3 ${r.archived ? 'opacity-60' : ''} ${bulk.isSelected(r.id) ? 'bg-brand-50/40' : ''}`}>
+                    <div className="flex items-start gap-3 min-w-0">
+                      <input type="checkbox" className="mt-1" checked={bulk.isSelected(r.id)} onChange={() => bulk.toggle(r.id)} />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] text-gray-400 font-mono">{r.displayId ?? '—'}</span>
+                          <span className="font-medium text-gray-800">{r.name}</span>
+                          <span className={r.type === 'Owner' ? 'badge-partial' : 'badge-paid'}>{r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}</span>
+                          <span className={statusOf(r) === 'current' ? 'badge-paid' : 'badge-unpaid'}>{statusOf(r) === 'current' ? 'Current' : 'Former'}</span>
+                          {r.archived && <span className="badge-partial">Archived</span>}
+                          {isBillingContactOf(r) && statusOf(r) === 'current' && (
+                            <span className="text-[10px] text-brand-500 font-medium">● billed</span>
+                          )}
+                          {r.idNumber && (
+                            <span title={`ID on file: ${maskIdNumber(r.idNumber)}`}>
+                              <IdCard size={13} className="text-gray-400" aria-label="ID on file" />
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">{r.mobile || '—'} · {r.email || '—'}</div>
+                        {statusOf(r) === 'former' && r.moveOutDate && <div className="text-[10px] text-gray-400 mt-0.5">Moved out {dateLabel(r.moveOutDate)}</div>}
+                        {statusOf(r) === 'current' && r.moveInDate && <div className="text-[10px] text-gray-400 mt-0.5">Since {dateLabel(r.moveInDate)}</div>}
+                        {bal !== 0 && (
+                          <div className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-1">
+                            <Wallet size={11} /> Deposit balance: {bal.toFixed(2)}
+                          </div>
                         )}
                       </div>
-                      <div className="text-xs text-gray-400 mt-1">{r.mobile || '—'} · {r.email || '—'}</div>
-                      {statusOf(r) === 'former' && r.moveOutDate && <div className="text-[10px] text-gray-400 mt-0.5">Moved out {dateLabel(r.moveOutDate)}</div>}
-                      {statusOf(r) === 'current' && r.moveInDate && <div className="text-[10px] text-gray-400 mt-0.5">Since {dateLabel(r.moveInDate)}</div>}
-                      {bal !== 0 && (
-                        <div className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-1">
-                          <Wallet size={11} /> Deposit balance: {bal.toFixed(2)}
-                        </div>
-                      )}
                     </div>
                     <div className="flex items-center shrink-0 gap-1">
                       <button onClick={() => openEdit(r)} className="icon-btn text-brand-500"><Pencil size={18} /></button>
@@ -304,7 +380,7 @@ export default function Residents() {
                       ) : (
                         <button onClick={() => archive(r)} className="icon-btn text-gray-400" title="Archive (hide, but keep the record)"><Archive size={18} /></button>
                       )}
-                      <button onClick={() => remove(r.id)} className="icon-btn text-red-400" title="Permanently delete"><Trash2 size={18} /></button>
+                      <button onClick={() => setConfirmDeleteId(r.id!)} className="icon-btn text-red-400" title="Permanently delete"><Trash2 size={18} /></button>
                     </div>
                   </div>
                 );
@@ -439,6 +515,32 @@ export default function Residents() {
           </div>
         </div>
       </Modal>
+
+      <BulkAddModal<BulkResidentRow>
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        title="Bulk Add Residents"
+        entityLabel="resident"
+        fields={BULK_FIELDS}
+        makeEmptyRow={() => ({ firstName: '', lastName: '', mobile: '', email: '', type: 'Tenant', flatId: String(flats[0]?.id ?? '') })}
+        isRowBlank={(r) => !r.firstName.trim() && !r.lastName.trim()}
+        onCommit={commitBulkAdd}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        title="Permanently delete this resident?"
+        message="This cannot be undone - their billing/payment history will remain but no longer link to a name. Consider Archiving instead if you just want them out of the way while keeping the record."
+        onConfirm={() => confirmDeleteId !== null && remove(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Permanently delete ${bulk.count} resident${bulk.count === 1 ? '' : 's'}?`}
+        message="This cannot be undone - their billing/payment history will remain but no longer link to a name."
+        onConfirm={bulkDelete}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
     </div>
   );
 }

@@ -2,8 +2,13 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel } from '@/lib/format';
-import { Plus, Pencil, Trash2, Search, Receipt } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Receipt, Layers } from 'lucide-react';
 import Modal from '@/components/Modal';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import BulkToolbar from '@/components/BulkToolbar';
+import BulkAddModal, { type BulkAddField } from '@/components/BulkAddModal';
+import { useBulkSelection } from '@/hooks/useBulkSelection';
+import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
 import { validateImageFile, fileToBase64 } from '@/lib/fileValidation';
 import { EXPENSE_CATEGORIES } from '@/types';
 import type { Expense } from '@/types';
@@ -14,6 +19,8 @@ const emptyForm = (buildingId: number): Expense => ({
   buildingId, flatId: undefined, category: EXPENSE_CATEGORIES[0], amount: 0, vendor: '', date: todayISO(), notes: '',
 });
 
+interface BulkRow { category: string; amount: number | ''; vendor: string; date: string }
+
 export default function Expenses() {
   const expenses = useLiveQuery(() => db.expenses.orderBy('id').reverse().toArray(), []) ?? [];
   const buildings = useLiveQuery(() => db.buildings.toArray(), []) ?? [];
@@ -23,8 +30,11 @@ export default function Expenses() {
   const [buildingFilter, setBuildingFilter] = useState<number | 'all'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [open, setOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [form, setForm] = useState<Expense>(emptyForm(buildings[0]?.id ?? 0));
   const [receiptErr, setReceiptErr] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
   const buildingName = (id: number) => buildings.find((b) => b.id === id)?.name ?? '—';
   const flatLabel = (id?: number) => (id ? flats.find((f) => f.id === id)?.unitNo : null);
@@ -39,6 +49,8 @@ export default function Expenses() {
 
   const byCategory = new Map<string, number>();
   filtered.forEach((e) => byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + e.amount));
+
+  const bulk = useBulkSelection(filtered);
 
   function openAdd() { setForm(emptyForm(buildings[0]?.id ?? 0)); setReceiptErr(null); setOpen(true); }
   function openEdit(e: Expense) { setForm(e); setReceiptErr(null); setOpen(true); }
@@ -56,14 +68,36 @@ export default function Expenses() {
   async function save() {
     if (!form.buildingId || !form.amount || form.amount <= 0) return;
     if (form.id) await db.expenses.update(form.id, form);
-    else await db.expenses.add(form);
+    else await db.expenses.add({ ...form, displayId: await nextDisplayId('expenses') });
     setOpen(false);
   }
 
-  async function remove(id?: number) {
-    if (!id) return;
-    if (!confirm('Delete this expense record?')) return;
+  async function remove(id: number) {
     await db.expenses.delete(id);
+    setConfirmDeleteId(null);
+  }
+
+  async function bulkDelete() {
+    await db.expenses.bulkDelete(bulk.selectedIds());
+    bulk.clear();
+    setConfirmBulkDelete(false);
+  }
+
+  const BULK_FIELDS: BulkAddField<BulkRow>[] = [
+    { key: 'category', label: 'Category', type: 'select', options: [...EXPENSE_CATEGORIES] },
+    { key: 'amount', label: 'Amount', type: 'number', required: true },
+    { key: 'vendor', label: 'Vendor', type: 'text' },
+    { key: 'date', label: 'Date', type: 'date' },
+  ];
+
+  async function commitBulkAdd(rows: BulkRow[]) {
+    const buildingId = buildingFilter !== 'all' ? buildingFilter : buildings[0]?.id;
+    if (!buildingId) return;
+    const ids = await nextDisplayIds('expenses', rows.length);
+    await db.expenses.bulkAdd(rows.map((r, i) => ({
+      buildingId, flatId: undefined, category: r.category, amount: r.amount === '' ? 0 : Number(r.amount),
+      vendor: r.vendor.trim(), date: r.date || todayISO(), notes: '', displayId: ids[i],
+    })));
   }
 
   return (
@@ -83,9 +117,14 @@ export default function Expenses() {
             {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-        <button onClick={openAdd} className="btn-primary flex items-center gap-2 justify-center shrink-0" disabled={buildings.length === 0}>
-          <Plus size={16} /> Add Expense
-        </button>
+        <div className="flex gap-2 shrink-0">
+          <button onClick={() => setBulkOpen(true)} className="btn-secondary flex items-center gap-2 justify-center" disabled={buildings.length === 0}>
+            <Layers size={16} /> Bulk Add
+          </button>
+          <button onClick={openAdd} className="btn-primary flex items-center gap-2 justify-center" disabled={buildings.length === 0}>
+            <Plus size={16} /> Add Expense
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -109,24 +148,30 @@ export default function Expenses() {
         </div>
       </div>
 
+      <BulkToolbar count={bulk.count} onDelete={() => setConfirmBulkDelete(true)} onClear={bulk.clear} />
+
       <div className="card overflow-hidden divide-y divide-gray-100">
         {filtered.map((e) => (
-          <div key={e.id} className="p-4 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-gray-800">{e.category}</span>
-                {e.vendor && <span className="text-xs text-gray-400">· {e.vendor}</span>}
-                {e.receiptImage && <Receipt size={12} className="text-gray-300" />}
+          <div key={e.id} className={`p-4 flex items-center justify-between gap-3 ${bulk.isSelected(e.id) ? 'bg-brand-50/40' : ''}`}>
+            <div className="flex items-center gap-3 min-w-0">
+              <input type="checkbox" checked={bulk.isSelected(e.id)} onChange={() => bulk.toggle(e.id)} />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] text-gray-400 font-mono">{e.displayId ?? '—'}</span>
+                  <span className="font-medium text-gray-800">{e.category}</span>
+                  {e.vendor && <span className="text-xs text-gray-400">· {e.vendor}</span>}
+                  {e.receiptImage && <Receipt size={12} className="text-gray-300" />}
+                </div>
+                <div className="text-xs text-gray-400 mt-0.5">
+                  {buildingName(e.buildingId)}{flatLabel(e.flatId) ? ` · Flat ${flatLabel(e.flatId)}` : ''} · {dateLabel(e.date)}
+                </div>
+                {e.notes && <div className="text-xs text-gray-500 mt-1">{e.notes}</div>}
               </div>
-              <div className="text-xs text-gray-400 mt-0.5">
-                {buildingName(e.buildingId)}{flatLabel(e.flatId) ? ` · Flat ${flatLabel(e.flatId)}` : ''} · {dateLabel(e.date)}
-              </div>
-              {e.notes && <div className="text-xs text-gray-500 mt-1">{e.notes}</div>}
             </div>
             <div className="flex items-center shrink-0 gap-2">
               <span className="text-sm font-semibold text-gray-800">{money(e.amount)}</span>
               <button onClick={() => openEdit(e)} className="icon-btn text-brand-500"><Pencil size={16} /></button>
-              <button onClick={() => remove(e.id)} className="icon-btn text-red-400"><Trash2 size={16} /></button>
+              <button onClick={() => setConfirmDeleteId(e.id!)} className="icon-btn text-red-400"><Trash2 size={16} /></button>
             </div>
           </div>
         ))}
@@ -182,6 +227,32 @@ export default function Expenses() {
           </div>
         </div>
       </Modal>
+
+      <BulkAddModal<BulkRow>
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        title="Bulk Add Expenses"
+        entityLabel="expense"
+        fields={BULK_FIELDS}
+        makeEmptyRow={() => ({ category: EXPENSE_CATEGORIES[0], amount: '', vendor: '', date: todayISO() })}
+        isRowBlank={(r) => r.amount === '' && !r.vendor.trim()}
+        onCommit={commitBulkAdd}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        title="Delete this expense record?"
+        message="This cannot be undone."
+        onConfirm={() => confirmDeleteId !== null && remove(confirmDeleteId)}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${bulk.count} expense${bulk.count === 1 ? '' : 's'}?`}
+        message="This cannot be undone."
+        onConfirm={bulkDelete}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
     </div>
   );
 }
