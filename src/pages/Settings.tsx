@@ -2,10 +2,30 @@ import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import type { CompanySettings } from '@/types';
-import { Building2, SlidersHorizontal, FileText, Receipt, Wallet, CreditCard, DatabaseBackup, PenTool, Trash2 } from 'lucide-react';
+import { Building2, SlidersHorizontal, FileText, Receipt, Wallet, CreditCard, DatabaseBackup, PenTool, Trash2, RotateCcw } from 'lucide-react';
 import Modal from '@/components/Modal';
 import SignaturePad from '@/components/SignaturePad';
 import { validateImageFile } from '@/lib/fileValidation';
+import { ID_PREFIXES, type SequencedEntity } from '@/lib/idPrefixes';
+
+const ID_FORMAT_LABELS: Record<SequencedEntity, string> = {
+  buildings: 'Buildings',
+  flats: 'Flats / Units',
+  residents: 'Residents',
+  tenancies: 'Tenancies',
+  ownerships: 'Ownerships',
+  contacts: 'Contacts',
+  emergencyContacts: 'Emergency Contacts',
+  vehicles: 'Vehicles',
+  parkingSpaces: 'Parking Spaces',
+  payments: 'Payments',
+  depositTransactions: 'Deposit Transactions',
+  maintenanceRequests: 'Maintenance Requests',
+  expenses: 'Expenses',
+  reminders: 'Reminders',
+  documents: 'Documents',
+};
+const ID_FORMAT_ENTITIES = Object.keys(ID_FORMAT_LABELS) as SequencedEntity[];
 
 const sections = [
   { key: 'company', label: 'Landlord / Company', icon: Building2 },
@@ -77,6 +97,23 @@ export default function SettingsPage() {
   function removeMethod(name: string) {
     if (!form) return;
     setForm({ ...form, paymentMethods: (form.paymentMethods ?? []).filter((m) => m !== name) });
+  }
+
+  function idFormatFor(entity: SequencedEntity) {
+    return form?.idFormats?.[entity] ?? ID_PREFIXES[entity];
+  }
+
+  function setIdFormat(entity: SequencedEntity, patch: Partial<{ prefix: string; digits: number }>) {
+    if (!form) return;
+    const current = idFormatFor(entity);
+    setForm({ ...form, idFormats: { ...(form.idFormats ?? {}), [entity]: { ...current, ...patch } } });
+  }
+
+  function resetIdFormat(entity: SequencedEntity) {
+    if (!form) return;
+    const next = { ...(form.idFormats ?? {}) };
+    delete next[entity];
+    setForm({ ...form, idFormats: next });
   }
 
   if (!form) return null;
@@ -226,6 +263,43 @@ export default function SettingsPage() {
                 onChange={(e) => setForm({ ...form, countryCode: e.target.value })} />
               <div className="text-[11px] text-gray-400 mt-1">Used to turn a local mobile number into the full international format WhatsApp requires. Leave blank if residents' numbers are already entered in full international format.</div>
             </div>
+
+            <div className="pt-2">
+              <h4 className="font-semibold text-gray-800 text-sm">Record ID Formats</h4>
+              <div className="text-[11px] text-gray-400 mt-1 mb-2">
+                Customize the prefix and digit count used for each record's auto-generated ID (e.g. "BLDG-0001"). Changes only apply to new records going forward - existing IDs never change.
+              </div>
+              <div className="border border-gray-100 rounded-lg divide-y divide-gray-100 max-h-80 overflow-y-auto">
+                {ID_FORMAT_ENTITIES.map((entity) => {
+                  const fmt = idFormatFor(entity);
+                  const isCustom = !!form.idFormats?.[entity];
+                  return (
+                    <div key={entity} className="flex items-center gap-2 px-3 py-2">
+                      <div className="flex-1 text-sm text-gray-700 truncate">{ID_FORMAT_LABELS[entity]}</div>
+                      <input
+                        className="input !py-1 !px-2 w-20 text-sm font-mono uppercase"
+                        maxLength={8}
+                        value={fmt.prefix}
+                        onChange={(e) => setIdFormat(entity, { prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '') })}
+                      />
+                      <input
+                        type="number" min={1} max={8}
+                        className="input !py-1 !px-2 w-16 text-sm"
+                        value={fmt.digits}
+                        onChange={(e) => setIdFormat(entity, { digits: Math.min(8, Math.max(1, Number(e.target.value) || 1)) })}
+                      />
+                      <span className="text-[11px] font-mono text-gray-400 w-24 shrink-0">{fmt.prefix}-{'0'.repeat(fmt.digits - 1)}1</span>
+                      {isCustom && (
+                        <button type="button" onClick={() => resetIdFormat(entity)} className="text-gray-400 hover:text-red-500 shrink-0" title="Reset to default">
+                          <RotateCcw size={13} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <button onClick={save} className="btn-primary">Save Changes</button>
           </div>
         )}

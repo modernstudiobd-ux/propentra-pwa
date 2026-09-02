@@ -477,6 +477,7 @@ export interface CompanySettings {
   dateFormat?: string; // e.g. 'MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD' - display preference, dates are always stored as ISO
   locale?: string; // BCP 47 locale tag, e.g. 'en-US', 'en-GB' - used for number/date formatting where relevant
   paymentMethods?: string[]; // configurable list shown in every payment-method dropdown
+  idFormats?: Record<string, { prefix: string; digits: number }>; // per-entity display-ID prefix/padding overrides (keys are SequencedEntity from lib/idPrefixes); only affects IDs generated from now on, never rewrites existing records
   defaultRates: {
     electricityRate: number;
     waterCharge: number;

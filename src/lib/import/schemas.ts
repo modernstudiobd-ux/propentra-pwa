@@ -359,8 +359,14 @@ export function normalizeHeader(s: string): string {
 /** Best-guess entity for a sheet, based on its tab name. Returns null if nothing matches (user picks manually). */
 export function guessEntityFromSheetName(name: string): ImportEntityKey | null {
   const n = normalizeHeader(name);
+  // "Tenancy"/"Tenancies"/"Lease(s)" and "Ownership(s)" are the lease/title
+  // relationship tables - checked first since they're the more specific
+  // match. A tab plainly called "Tenants" or "Owners" (no "-ship"/"-cy"),
+  // however, is a people list - e.g. two tabs named "Tenants" and "Owners"
+  // in the same workbook both belong in Residents, merged together with the
+  // rest of that logic living in the Import Wizard's per-sheet Type default.
   if (/tenanc|lease/.test(n)) return 'tenancies';
-  if (/ownership|owner/.test(n)) return 'ownerships';
+  if (/ownership/.test(n)) return 'ownerships';
   if (/emergency/.test(n)) return 'emergencyContacts';
   if (/contact/.test(n)) return 'contacts';
   if (/vehicle|car/.test(n)) return 'vehicles';

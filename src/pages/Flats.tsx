@@ -31,6 +31,7 @@ export default function Flats() {
   const buildings = useLiveQuery(() => db.buildings.toArray(), []) ?? [];
   const [query, setQuery] = useState('');
   const [buildingFilter, setBuildingFilter] = useState<number | 'all'>('all');
+  const [vacantOnly, setVacantOnly] = useState(false);
   const [open, setOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [form, setForm] = useState<Flat>(emptyFlat(buildings[0]?.id ?? 0));
@@ -41,6 +42,7 @@ export default function Flats() {
 
   const filtered = flats.filter((f) =>
     (buildingFilter === 'all' || f.buildingId === buildingFilter) &&
+    (!vacantOnly || f.occupancyStatus === 'vacant') &&
     (f.unitNo.toLowerCase().includes(query.toLowerCase()) || (f.displayId ?? '').toLowerCase().includes(query.toLowerCase()))
   );
   const bulk = useBulkSelection(filtered);
@@ -90,6 +92,9 @@ export default function Flats() {
             <option value="all">All Buildings</option>
             {buildings.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+          <label className="flex items-center gap-2 text-sm text-gray-600 whitespace-nowrap px-1">
+            <input type="checkbox" checked={vacantOnly} onChange={(e) => setVacantOnly(e.target.checked)} /> Vacant only
+          </label>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setBulkOpen(true)} className="btn-secondary flex items-center gap-2 justify-center" disabled={buildings.length === 0}>
@@ -168,7 +173,7 @@ export default function Flats() {
           )}
         </div>
 
-        <div className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100">Total: {filtered.length} flats</div>
+        <div className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100">Total: {filtered.length} flat{filtered.length === 1 ? '' : 's'}{vacantOnly ? ' (vacant only)' : ''}</div>
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'Edit Flat' : 'Add Flat'}>
@@ -271,9 +276,13 @@ function ParkingPanel({ buildings, flats, buildingFilter }: { buildings: { id?: 
   const [form, setForm] = useState<ParkingSpace | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [vacantOnly, setVacantOnly] = useState(false);
 
   const buildingName = (id: number) => buildings.find((b) => b.id === id)?.name ?? '—';
-  const filtered = spaces.filter((s) => buildingFilter === 'all' || s.buildingId === buildingFilter);
+  const filtered = spaces.filter((s) =>
+    (buildingFilter === 'all' || s.buildingId === buildingFilter) &&
+    (!vacantOnly || s.status === 'vacant')
+  );
   const bulk = useBulkSelection(filtered);
 
   function openAdd() {
@@ -311,8 +320,11 @@ function ParkingPanel({ buildings, flats, buildingFilter }: { buildings: { id?: 
   return (
     <div className="card overflow-hidden">
       <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2 text-sm font-medium text-gray-700"><SquareParking size={15} /> Parking Spaces</div>
+        <div className="flex items-center gap-2 text-sm font-medium text-gray-700"><SquareParking size={15} /> Parking Spaces (incl. Garages)</div>
         <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-xs text-gray-600 whitespace-nowrap px-1">
+            <input type="checkbox" checked={vacantOnly} onChange={(e) => setVacantOnly(e.target.checked)} /> Vacant only
+          </label>
           <button onClick={() => setBulkOpen(true)} className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5" disabled={buildings.length === 0}>
             <Layers size={14} /> Bulk Add
           </button>
@@ -343,7 +355,9 @@ function ParkingPanel({ buildings, flats, buildingFilter }: { buildings: { id?: 
             </div>
           </div>
         ))}
-        {filtered.length === 0 && <div className="text-center text-sm text-gray-400 py-6">No parking spaces yet</div>}
+        {filtered.length === 0 && (
+          <div className="text-center text-sm text-gray-400 py-6">{vacantOnly ? 'No vacant parking spaces' : 'No parking spaces yet'}</div>
+        )}
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={form?.id ? 'Edit Parking Space' : 'Add Parking Space'}>

@@ -24,10 +24,29 @@ export const ID_PREFIXES = {
 } as const;
 
 export type SequencedEntity = keyof typeof ID_PREFIXES;
+export type IdFormat = { prefix: string; digits: number };
 
-/** Builds the zero-padded display ID for entity `n`, e.g. formatDisplayId('residents', 42) -> "P-00042". */
+// User-customizable overrides (Settings -> General -> Record ID Formats),
+// kept in module memory rather than read from the DB here directly, so this
+// file stays dependency-free (see note above). Something with DB access -
+// currently lib/ids.ts's watchIdFormatSettings() - pushes the saved
+// CompanySettings.idFormats into this store at startup and on every save.
+let overrides: Partial<Record<SequencedEntity, IdFormat>> = {};
+
+/** Replaces the active ID format overrides (or clears them if omitted). Call whenever Settings' idFormats changes. */
+export function setIdFormatOverrides(o: Partial<Record<SequencedEntity, IdFormat>> | undefined | null): void {
+  overrides = o ?? {};
+}
+
+/** The format currently in effect for an entity - the user's override if they set one (with a valid, non-empty prefix), otherwise the built-in default. */
+export function getIdFormat(entity: SequencedEntity): IdFormat {
+  const o = overrides[entity];
+  return o && o.prefix && o.prefix.trim() && o.digits > 0 ? o : ID_PREFIXES[entity];
+}
+
+/** Builds the zero-padded display ID for entity `n`, e.g. formatDisplayId('residents', 42) -> "P-00042". Honors any user-configured prefix/digit-count override. */
 export function formatDisplayId(entity: SequencedEntity, n: number): string {
-  const { prefix, digits } = ID_PREFIXES[entity];
+  const { prefix, digits } = getIdFormat(entity);
   return `${prefix}-${String(Math.max(0, Math.trunc(n))).padStart(digits, '0')}`;
 }
 

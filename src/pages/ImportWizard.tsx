@@ -171,6 +171,20 @@ export default function ImportWizard() {
       if (!hasColumn && !finalManual[field.key] && manualMemory[field.key]) finalManual[field.key] = manualMemory[field.key];
     }
 
+    // Multiple Residents-mapped tabs are common (e.g. separate "Tenants" and
+    // "Owners" tabs that both merge into the Residents table) - each such
+    // tab should default its own Type rather than inheriting whatever the
+    // last Residents tab's manual value was, unless this sheet has its own
+    // Type column mapped from the file.
+    if (job.entity === 'residents') {
+      const hasTypeColumn = finalMapping.type != null && finalMapping.type >= 0;
+      if (!hasTypeColumn) {
+        const sheetName = normalizeHeader(job.sheet.name);
+        if (/owner/.test(sheetName) && !/tenant/.test(sheetName)) finalManual.type = 'Owner';
+        else if (/tenant/.test(sheetName) && !/owner/.test(sheetName)) finalManual.type = 'Tenant';
+      }
+    }
+
     setJobIndex(index);
     setMapping(finalMapping);
     setManualValues(finalManual);

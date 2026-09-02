@@ -1,8 +1,20 @@
+import { liveQuery } from 'dexie';
 import { db } from '@/lib/db';
-import { ID_PREFIXES, formatDisplayId, trailingNumber, type SequencedEntity } from '@/lib/idPrefixes';
+import { ID_PREFIXES, formatDisplayId, trailingNumber, setIdFormatOverrides, type SequencedEntity } from '@/lib/idPrefixes';
 
 export type { SequencedEntity };
 export { ID_PREFIXES };
+
+let idFormatWatchStarted = false;
+
+/** Call once at app startup to keep every entity's display-ID prefix/padding in sync with Settings -> General -> Record ID Formats. */
+export function watchIdFormatSettings(): void {
+  if (idFormatWatchStarted) return;
+  idFormatWatchStarted = true;
+  liveQuery(() => db.settings.toCollection().first()).subscribe((settings) => {
+    setIdFormatOverrides(settings?.idFormats as any);
+  });
+}
 
 /** Allocates and returns the next display ID for one entity (e.g. "P-00043"), atomically bumping its counter. */
 export async function nextDisplayId(entity: SequencedEntity): Promise<string> {

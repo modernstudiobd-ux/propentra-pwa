@@ -5,8 +5,10 @@ import './index.css';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { seedIfEmpty } from '@/lib/db';
 import { watchCurrencySettings } from '@/lib/currency';
+import { watchIdFormatSettings } from '@/lib/ids';
 
 watchCurrencySettings();
+watchIdFormatSettings();
 
 function render() {
   ReactDOM.createRoot(document.getElementById('root')!).render(
