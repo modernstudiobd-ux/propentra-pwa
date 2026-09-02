@@ -328,6 +328,13 @@ export default function Residents() {
         </div>
       </div>
 
+      <div className="flex items-center gap-2 px-1">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} disabled={filtered.length === 0} />
+          Select all {filtered.length} resident{filtered.length === 1 ? '' : 's'}
+        </label>
+      </div>
+
       <BulkToolbar count={bulk.count} onDelete={() => setConfirmBulkDelete(true)} onClear={bulk.clear} deleteLabel="Delete Selected (Permanent)" />
 
       <div className="space-y-3">
@@ -538,6 +545,8 @@ export default function Residents() {
         open={confirmBulkDelete}
         title={`Permanently delete ${bulk.count} resident${bulk.count === 1 ? '' : 's'}?`}
         message="This cannot be undone - their billing/payment history will remain but no longer link to a name."
+        confirmLabel="Delete Permanently"
+        requireTypedConfirmation="DELETE"
         onConfirm={bulkDelete}
         onCancel={() => setConfirmBulkDelete(false)}
       />

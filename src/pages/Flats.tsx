@@ -108,6 +108,13 @@ export default function Flats() {
 
       <BulkToolbar count={bulk.count} onDelete={() => setConfirmBulkDelete(true)} onClear={bulk.clear} />
 
+      <div className="flex items-center gap-2 px-1">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} disabled={filtered.length === 0} />
+          Select all {filtered.length} flat{filtered.length === 1 ? '' : 's'}
+        </label>
+      </div>
+
       <div className="card overflow-hidden">
         <div className="hidden sm:block overflow-x-auto">
           <table className="w-full min-w-[700px]">
@@ -253,6 +260,7 @@ export default function Flats() {
         title={`Delete ${bulk.count} flat${bulk.count === 1 ? '' : 's'}?`}
         message="This cannot be undone."
         confirmLabel="Delete All Selected"
+        requireTypedConfirmation="DELETE"
         onConfirm={bulkDelete}
         onCancel={() => setConfirmBulkDelete(false)}
       />
@@ -333,7 +341,11 @@ function ParkingPanel({ buildings, flats, buildingFilter }: { buildings: { id?: 
           </button>
         </div>
       </div>
-      <div className="px-4 pt-3">
+      <div className="px-4 pt-3 space-y-2">
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} disabled={filtered.length === 0} />
+          Select all {filtered.length} space{filtered.length === 1 ? '' : 's'}
+        </label>
         <BulkToolbar count={bulk.count} onDelete={() => setConfirmBulkDelete(true)} onClear={bulk.clear} />
       </div>
       <div className="divide-y divide-gray-100">
@@ -413,6 +425,7 @@ function ParkingPanel({ buildings, flats, buildingFilter }: { buildings: { id?: 
         title={`Delete ${bulk.count} parking space${bulk.count === 1 ? '' : 's'}?`}
         message="This cannot be undone."
         confirmLabel="Delete All Selected"
+        requireTypedConfirmation="DELETE"
         onConfirm={bulkDelete}
         onCancel={() => setConfirmBulkDelete(false)}
       />
