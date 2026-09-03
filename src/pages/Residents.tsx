@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
-import { Plus, Pencil, Trash2, Search, IdCard, Wallet, Building2, Eye, EyeOff, Archive, ArchiveRestore, Layers } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, IdCard, Wallet, Building2, Eye, EyeOff, Archive, ArchiveRestore, Layers, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -110,6 +110,58 @@ export default function Residents() {
     .map((f) => ({ flat: f, residents: filtered.filter((r) => r.flatId === f.id) }))
     .filter((g) => g.residents.length > 0)
     .sort((a, b) => buildingName(a.flat.buildingId).localeCompare(buildingName(b.flat.buildingId)) || a.flat.unitNo.localeCompare(b.flat.unitNo));
+
+  // Residents with no unit on file - most commonly an Owner imported from a
+  // sheet that has no Building/Unit column of its own (an off-site owner
+  // record, common in real portfolios). Without this bucket these residents
+  // exist in the database but were invisible: the grouped view above only
+  // ever shows residents whose flatId matches a real flat.
+  const unassigned = filtered.filter((r) => !flats.some((f) => f.id === r.flatId));
+
+  function ResidentRow({ r }: { r: Resident }) {
+    const bal = depositBalance(r.id);
+    return (
+      <div className={`p-4 flex items-start justify-between gap-3 ${r.archived ? 'opacity-60' : ''} ${bulk.isSelected(r.id) ? 'bg-brand-50/40' : ''}`}>
+        <div className="flex items-start gap-3 min-w-0">
+          <input type="checkbox" className="mt-1" checked={bulk.isSelected(r.id)} onChange={() => bulk.toggle(r.id)} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] text-gray-400 font-mono">{r.displayId ?? '—'}</span>
+              <span className="font-medium text-gray-800">{r.name}</span>
+              <span className={r.type === 'Owner' ? 'badge-partial' : 'badge-paid'}>{r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}</span>
+              <span className={statusOf(r) === 'current' ? 'badge-paid' : 'badge-unpaid'}>{statusOf(r) === 'current' ? 'Current' : 'Former'}</span>
+              {r.archived && <span className="badge-partial">Archived</span>}
+              {isBillingContactOf(r) && statusOf(r) === 'current' && (
+                <span className="text-[10px] text-brand-500 font-medium">● billed</span>
+              )}
+              {r.idNumber && (
+                <span title={`ID on file: ${maskIdNumber(r.idNumber)}`}>
+                  <IdCard size={13} className="text-gray-400" aria-label="ID on file" />
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-gray-400 mt-1">{r.mobile || '—'} · {r.email || '—'}</div>
+            {statusOf(r) === 'former' && r.moveOutDate && <div className="text-[10px] text-gray-400 mt-0.5">Moved out {dateLabel(r.moveOutDate)}</div>}
+            {statusOf(r) === 'current' && r.moveInDate && <div className="text-[10px] text-gray-400 mt-0.5">Since {dateLabel(r.moveInDate)}</div>}
+            {bal !== 0 && (
+              <div className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-1">
+                <Wallet size={11} /> Deposit balance: {bal.toFixed(2)}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center shrink-0 gap-1">
+          <button onClick={() => openEdit(r)} className="icon-btn text-brand-500"><Pencil size={18} /></button>
+          {r.archived ? (
+            <button onClick={() => unarchive(r)} className="icon-btn text-brand-500" title="Unarchive"><ArchiveRestore size={18} /></button>
+          ) : (
+            <button onClick={() => archive(r)} className="icon-btn text-gray-400" title="Archive (hide, but keep the record)"><Archive size={18} /></button>
+          )}
+          <button onClick={() => setConfirmDeleteId(r.id!)} className="icon-btn text-red-400" title="Permanently delete"><Trash2 size={18} /></button>
+        </div>
+      </div>
+    );
+  }
 
   function openAdd() { setForm(emptyForm(flats)); setIdFileError(''); setRevealId(false); setRevealDoc(false); setOpen(true); }
   function openEdit(r: Resident) {
@@ -338,6 +390,22 @@ export default function Residents() {
       <BulkToolbar count={bulk.count} onDelete={() => setConfirmBulkDelete(true)} onClear={bulk.clear} deleteLabel="Delete Selected (Permanent)" />
 
       <div className="space-y-3">
+        {unassigned.length > 0 && (
+          <div className="card overflow-hidden border border-amber-200">
+            <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-100 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-medium text-amber-800">
+                <AlertCircle size={14} className="text-amber-500" /> Unassigned — No Unit
+              </div>
+              <span className="text-xs text-amber-600">{unassigned.length} resident{unassigned.length > 1 ? 's' : ''}</span>
+            </div>
+            <div className="text-[11px] text-amber-700 bg-amber-50/60 px-4 py-1.5 border-b border-amber-100">
+              Not linked to a flat yet — common for owners imported from a sheet with no Unit column. Edit and choose a Flat to move them into a unit group below.
+            </div>
+            <div className="divide-y divide-gray-100">
+              {unassigned.map((r) => <ResidentRow key={r.id} r={r} />)}
+            </div>
+          </div>
+        )}
         {groups.map((g) => (
           <div key={g.flat.id} className="card overflow-hidden">
             <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
@@ -348,57 +416,17 @@ export default function Residents() {
               <span className="text-xs text-gray-400">{g.residents.length} resident{g.residents.length > 1 ? 's' : ''}</span>
             </div>
             <div className="divide-y divide-gray-100">
-              {g.residents.map((r) => {
-                const bal = depositBalance(r.id);
-                return (
-                  <div key={r.id} className={`p-4 flex items-start justify-between gap-3 ${r.archived ? 'opacity-60' : ''} ${bulk.isSelected(r.id) ? 'bg-brand-50/40' : ''}`}>
-                    <div className="flex items-start gap-3 min-w-0">
-                      <input type="checkbox" className="mt-1" checked={bulk.isSelected(r.id)} onChange={() => bulk.toggle(r.id)} />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-[10px] text-gray-400 font-mono">{r.displayId ?? '—'}</span>
-                          <span className="font-medium text-gray-800">{r.name}</span>
-                          <span className={r.type === 'Owner' ? 'badge-partial' : 'badge-paid'}>{r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}</span>
-                          <span className={statusOf(r) === 'current' ? 'badge-paid' : 'badge-unpaid'}>{statusOf(r) === 'current' ? 'Current' : 'Former'}</span>
-                          {r.archived && <span className="badge-partial">Archived</span>}
-                          {isBillingContactOf(r) && statusOf(r) === 'current' && (
-                            <span className="text-[10px] text-brand-500 font-medium">● billed</span>
-                          )}
-                          {r.idNumber && (
-                            <span title={`ID on file: ${maskIdNumber(r.idNumber)}`}>
-                              <IdCard size={13} className="text-gray-400" aria-label="ID on file" />
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-400 mt-1">{r.mobile || '—'} · {r.email || '—'}</div>
-                        {statusOf(r) === 'former' && r.moveOutDate && <div className="text-[10px] text-gray-400 mt-0.5">Moved out {dateLabel(r.moveOutDate)}</div>}
-                        {statusOf(r) === 'current' && r.moveInDate && <div className="text-[10px] text-gray-400 mt-0.5">Since {dateLabel(r.moveInDate)}</div>}
-                        {bal !== 0 && (
-                          <div className="text-[10px] text-emerald-600 mt-0.5 flex items-center gap-1">
-                            <Wallet size={11} /> Deposit balance: {bal.toFixed(2)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center shrink-0 gap-1">
-                      <button onClick={() => openEdit(r)} className="icon-btn text-brand-500"><Pencil size={18} /></button>
-                      {r.archived ? (
-                        <button onClick={() => unarchive(r)} className="icon-btn text-brand-500" title="Unarchive"><ArchiveRestore size={18} /></button>
-                      ) : (
-                        <button onClick={() => archive(r)} className="icon-btn text-gray-400" title="Archive (hide, but keep the record)"><Archive size={18} /></button>
-                      )}
-                      <button onClick={() => setConfirmDeleteId(r.id!)} className="icon-btn text-red-400" title="Permanently delete"><Trash2 size={18} /></button>
-                    </div>
-                  </div>
-                );
-              })}
+              {g.residents.map((r) => <ResidentRow key={r.id} r={r} />)}
             </div>
           </div>
         ))}
-        {groups.length === 0 && (
+        {groups.length === 0 && unassigned.length === 0 && (
           <div className="card p-8 text-center text-sm text-gray-400">No residents found</div>
         )}
-        <div className="text-xs text-gray-400 px-1">Total: {filtered.length} resident{filtered.length !== 1 ? 's' : ''} across {groups.length} flat{groups.length !== 1 ? 's' : ''}</div>
+        <div className="text-xs text-gray-400 px-1">
+          Total: {filtered.length} resident{filtered.length !== 1 ? 's' : ''} across {groups.length} flat{groups.length !== 1 ? 's' : ''}
+          {unassigned.length > 0 ? ` + ${unassigned.length} unassigned` : ''}
+        </div>
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'Edit Resident' : 'Add Resident'}>

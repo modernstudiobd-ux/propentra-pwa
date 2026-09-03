@@ -528,6 +528,19 @@ export default function ImportWizard() {
           <div className="flex items-center gap-2 text-emerald-600 font-medium">
             <CheckCircle2 size={20} /> "{lastResult.sheetName}" imported as {lastResult.entityLabel}
           </div>
+          {currentJob?.entity === 'residents' && (() => {
+            const unassignedCount = lastResult.rows.filter((r, i) => {
+              const outcome = lastResult.result.rowResults[i];
+              return outcome && outcome.status !== 'skipped' && !r.refs['flatRef']?.raw;
+            }).length;
+            if (unassignedCount === 0) return null;
+            return (
+              <div className="flex items-start gap-2 bg-amber-50 text-amber-700 text-xs rounded-xl p-3">
+                <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                <div>{unassignedCount} resident{unassignedCount > 1 ? 's were' : ' was'} imported with no unit (this sheet had no Building/Unit column) - they'll show up under "Unassigned — No Unit" on the Residents page until you link each one to a flat.</div>
+              </div>
+            );
+          })()}
           <div className="grid grid-cols-3 gap-2 text-sm">
             <div className="bg-emerald-50 rounded-xl px-3 py-2"><div className="text-xs text-emerald-600">Created</div><div className="font-semibold text-emerald-700">{lastResult.result.created}</div></div>
             <div className="bg-brand-50 rounded-xl px-3 py-2"><div className="text-xs text-brand-600">Updated</div><div className="font-semibold text-brand-700">{lastResult.result.updated}</div></div>
