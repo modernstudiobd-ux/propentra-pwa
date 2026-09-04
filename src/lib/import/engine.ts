@@ -20,6 +20,8 @@ export interface ProcessedRow {
   duplicate: { matchedId: number } | null;
   decision: DuplicateDecision; // only meaningful when `duplicate` is set
   included: boolean; // user can manually exclude a row from the preview
+  /** Set instead of `duplicate` when two or more EXISTING records already collide on a match key (e.g. shared phone number) - it's not safe to guess which one this row means, so the row is never auto-created OR auto-merged; it's skipped until resolved manually (edit the source data, or match by a more specific field). See detectDuplicates. */
+  ambiguousMatch?: string;
 }
 
 const TABLE_MAP: Record<ImportEntityKey, 'buildings' | 'flats' | 'residents' | 'expenses' | 'tenancies' | 'ownerships' | 'contacts' | 'emergencyContacts' | 'vehicles' | 'parkingSpaces'> = {
@@ -46,6 +48,23 @@ function refFieldTarget(fieldKey: string): string {
   if (fieldKey === 'flatRef') return 'flatId';
   if (fieldKey === 'residentRef') return 'residentId';
   return fieldKey;
+}
+
+/** Digits-only phone comparison key - strips formatting (spaces, dashes, parens, a leading "+") so "+1 555-0100" and "5550100" match, without accidentally merging two genuinely different numbers the way stripping "@"/"." from an email would. */
+function normalizePhoneMatch(v: string): string {
+  return v.replace(/\D/g, '');
+}
+
+/** Email comparison key - trims and lowercases only. Unlike normalizeHeader (used for names/headers), this deliberately KEEPS "@" and "." - stripping them would wrongly collapse "jane.doe@x.com" and "janedoe@xcom" together. */
+function normalizeEmailMatch(v: string): string {
+  return v.trim().toLowerCase();
+}
+
+/** Field-aware normalization for duplicate-matching keys. Falls back to the generic alphanumeric-only normalizeHeader for every field except phone/email, which need their own rules (see above) to stay accurate. */
+export function normalizeMatchValue(fieldKey: string, value: string): string {
+  if (fieldKey === 'mobile' || fieldKey === 'altPhone' || fieldKey === 'phone') return normalizePhoneMatch(value);
+  if (fieldKey === 'email') return normalizeEmailMatch(value);
+  return normalizeHeader(value);
 }
 
 // --- Step 1: coerce raw cells into typed field values, collecting errors ---
@@ -317,11 +336,18 @@ function previewRecord(def: ImportEntityDef, row: ProcessedRow): Record<string, 
 export async function detectDuplicates(def: ImportEntityDef, rows: ProcessedRow[]) {
   const tableName = TABLE_MAP[def.key];
   const existingRows: any[] = await (db as any)[tableName].toArray();
+  const AMBIGUOUS = Symbol('ambiguous');
   const indices = def.matchKeyGroups.map((group) => {
-    const idx = new Map<string, number>();
+    const idx = new Map<string, number | typeof AMBIGUOUS>();
     for (const r of existingRows) {
       if (group.every((k) => r[k] !== undefined && r[k] !== '' && r[k] !== null)) {
-        idx.set(group.map((k) => normalizeHeader(String(r[k]))).join('||'), r.id);
+        const key = group.map((k) => normalizeMatchValue(k, String(r[k]))).join('||');
+        // If two EXISTING records already collide on this key (e.g. bad
+        // legacy data with a shared phone number), it's not safe to guess
+        // which one a new row means - treat the key as permanently
+        // ambiguous rather than silently matching whichever record
+        // happened to be indexed last.
+        idx.set(key, idx.has(key) ? AMBIGUOUS : r.id);
       }
     }
     return { group, idx };
@@ -329,12 +355,19 @@ export async function detectDuplicates(def: ImportEntityDef, rows: ProcessedRow[
 
   for (const row of rows) {
     row.duplicate = null;
+    row.ambiguousMatch = undefined;
     if (row.errors.length) continue;
     const full = previewRecord(def, row);
     for (const { group, idx } of indices) {
       if (group.every((k) => full[k] !== undefined && full[k] !== '' && full[k] !== null)) {
-        const key = group.map((k) => normalizeHeader(String(full[k]))).join('||');
+        const key = group.map((k) => normalizeMatchValue(k, String(full[k]))).join('||');
         const id = idx.get(key);
+        if (id === AMBIGUOUS) {
+          // Never silently merge - flag it and let the person resolve it
+          // manually in the review step instead of guessing.
+          row.ambiguousMatch = `Multiple existing records share the same ${group.join('/')} - could not determine a safe match. Review manually.`;
+          break;
+        }
         if (id !== undefined) { row.duplicate = { matchedId: id }; break; }
       }
     }
@@ -350,6 +383,22 @@ export interface ImportRunResult {
   updated: number;
   skipped: number;
   rowResults: { rowIndex: number; status: 'created' | 'updated' | 'skipped'; message?: string }[];
+}
+
+/** Fields that must never be blanked on an UPDATE just because the incoming
+ * spreadsheet cell was empty for this row - a second sheet (e.g. an Owner
+ * sheet importing a person already known from a Tenant sheet) commonly
+ * leaves most columns blank and only states what IT knows. Only applied to
+ * the `residents` entity (see requirements): a blank cell there must never
+ * erase a phone/email/name/etc. that already exists on file. `isResident`/
+ * `isOwner`/`type` are handled separately below (OR-merged, never simply
+ * dropped or overwritten) since they're roles, not scalar contact fields. */
+const NON_BLANKABLE_ON_UPDATE = new Set([
+  'residents',
+]);
+
+function isBlank(v: any): boolean {
+  return v === undefined || v === null || v === '';
 }
 
 /**
@@ -376,6 +425,16 @@ export async function commitImport(def: ImportEntityDef, rows: ProcessedRow[]): 
         if (!row.included || row.errors.length > 0) {
           skipped++;
           rowResults.push({ rowIndex: row.rowIndex, status: 'skipped', message: row.errors[0] || 'Excluded from import' });
+          continue;
+        }
+        // Two or more EXISTING records already share this row's match key
+        // (e.g. duplicate phone numbers already on file) - never guess,
+        // never silently merge into either one. The person has to resolve
+        // it manually (fix the source data, or match a more specific
+        // field) before this row can be imported.
+        if (row.ambiguousMatch) {
+          skipped++;
+          rowResults.push({ rowIndex: row.rowIndex, status: 'skipped', message: row.ambiguousMatch });
           continue;
         }
         if (row.duplicate && row.decision === 'skip') {
@@ -430,6 +489,15 @@ export async function commitImport(def: ImportEntityDef, rows: ProcessedRow[]): 
         // Residents carry a denormalized unit label alongside flatId, same
         // convention used everywhere else in the app (see types/index.ts).
         if (def.key === 'residents' && fRef?.raw) finalRecord.unitLabel = fRef.raw;
+        // A fresh resident row always gets explicit isResident/isOwner,
+        // derived from the legacy `type` column when the sheet had no
+        // dedicated Is Resident/Is Owner columns of its own - so a plain
+        // "Tenant"/"Owner" sheet with no other change still imports
+        // correctly instead of leaving the booleans undefined.
+        if (def.key === 'residents') {
+          if (finalRecord.isResident === undefined) finalRecord.isResident = finalRecord.type !== 'Owner';
+          if (finalRecord.isOwner === undefined) finalRecord.isOwner = finalRecord.type === 'Owner';
+        }
         // Parking spaces may optionally be pre-assigned to a resident's unit.
         if (def.key === 'parkingSpaces' && matchedResident && finalRecord.flatId === undefined) {
           finalRecord.flatId = matchedResident.flatId;
@@ -488,6 +556,39 @@ export async function commitImport(def: ImportEntityDef, rows: ProcessedRow[]): 
         }
 
         if (row.duplicate && row.decision === 'update') {
+          if (def.key === 'residents') {
+            const existing = await db.residents.get(row.duplicate.matchedId);
+            if (existing) {
+              // Roles are additive across sheets, never overwritten: a
+              // person already known as a Resident who now also appears on
+              // an Owner sheet (or vice versa) must end up as BOTH, not
+              // have their existing role clobbered by whichever sheet
+              // imports last. Falls back through the legacy `type` field
+              // for a pre-existing record that predates isResident/isOwner.
+              const existingIsResident = existing.isResident ?? existing.type !== 'Owner';
+              const existingIsOwner = existing.isOwner ?? existing.type === 'Owner';
+              const incomingIsResident = finalRecord.isResident ?? (finalRecord.type !== undefined ? finalRecord.type !== 'Owner' : undefined);
+              const incomingIsOwner = finalRecord.isOwner ?? (finalRecord.type !== undefined ? finalRecord.type === 'Owner' : undefined);
+              finalRecord.isResident = existingIsResident || !!incomingIsResident;
+              finalRecord.isOwner = existingIsOwner || !!incomingIsOwner;
+              // Never let the legacy single-role `type` field regress a
+              // person who is now known to be both - it's purely a display
+              // label for old screens, isResident/isOwner above are the
+              // real source of truth.
+              finalRecord.type = finalRecord.isOwner && !finalRecord.isResident ? 'Owner' : 'Tenant';
+
+              // A blank spreadsheet cell must never erase good data already
+              // on file - only fields the incoming row actually has a
+              // value for are applied.
+              if (NON_BLANKABLE_ON_UPDATE.has(tableName)) {
+                for (const key of Object.keys(finalRecord)) {
+                  if (isBlank(finalRecord[key]) && !isBlank((existing as any)[key])) {
+                    delete finalRecord[key];
+                  }
+                }
+              }
+            }
+          }
           await (db as any)[tableName].update(row.duplicate.matchedId, finalRecord);
           updated++;
           rowResults.push({ rowIndex: row.rowIndex, status: 'updated' });

@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Home, Users, Receipt, FileText,
   History, CreditCard, BarChart3, Settings, DatabaseBackup,
   ChevronDown, X, HelpCircle, PiggyBank, Wrench, Wallet, BellRing, FolderOpen, History as HistoryIcon, ShieldCheck,
-  FileSpreadsheet,
+  FileSpreadsheet, Landmark,
 } from 'lucide-react';
 import { useState } from 'react';
 import StorageStatus from './StorageStatus';
@@ -13,6 +13,7 @@ const nav = [
   { to: '/buildings', label: 'Buildings', icon: Building2 },
   { to: '/flats', label: 'Flats', icon: Home },
   { to: '/residents', label: 'Residents', icon: Users },
+  { to: '/owners', label: 'Owners', icon: Landmark },
 ];
 
 const billingNav = [

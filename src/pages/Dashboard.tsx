@@ -5,13 +5,14 @@ import { money, moneyCompact, dateLabel } from '@/lib/format';
 import {
   Building2, Home, Users, FileWarning, Wallet, Eye,
   FileText, Receipt, UserPlus, Layers, Plus, ChevronDown,
-  AlertTriangle, Wrench, BellRing, FolderOpen, PiggyBank, CheckCircle2, ChevronRight,
+  AlertTriangle, Wrench, BellRing, FolderOpen, PiggyBank, CheckCircle2, ChevronRight, Landmark,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Link, useNavigate } from 'react-router-dom';
 import InvoiceViewModal from '@/components/InvoiceViewModal';
 import MiniCalendar from '@/components/MiniCalendar';
 import { getExpiringTenancies } from '@/lib/tenancy';
+import { residentIsResident, residentIsOwner } from '@/lib/roles';
 import type { Bill, Tenancy } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -64,7 +65,13 @@ export default function Dashboard() {
     (monthFilter === 'all' || b.billingMonth === monthFilter)
   );
   const flatsInScope = buildingFilter === 'all' ? flats : flats.filter((f) => f.buildingId === buildingFilter);
-  const residentsInScope = buildingFilter === 'all' ? residents : residents.filter((r) => r.buildingId === buildingFilter);
+  // Resident/Owner counts are independent relationships, not a single role
+  // field - an offsite owner must contribute 0 to the resident count (and
+  // 1 to the owner count), while an owner who lives in their own flat
+  // contributes 1 to both. See lib/roles.ts.
+  const inBuildingScope = (r: { buildingId: number }) => buildingFilter === 'all' || r.buildingId === buildingFilter;
+  const residentsInScope = residents.filter((r) => inBuildingScope(r) && residentIsResident(r));
+  const ownersInScope = residents.filter((r) => inBuildingScope(r) && residentIsOwner(r));
 
   const unpaidBills = bills.filter((b) => b.status !== 'paid');
   const unpaidTotal = unpaidBills.reduce((s, b) => s + (b.totalAmount - b.paidAmount), 0);
@@ -171,10 +178,11 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
         <StatCard icon={Building2} label="Buildings" value={buildingFilter === 'all' ? buildings.length : 1} bg="#e0f2fe" fg="#0284c7" />
         <StatCard icon={Home} label="Flats" value={flatsInScope.length} bg="#dcfce7" fg="#16a34a" />
         <StatCard icon={Users} label="Residents" value={residentsInScope.length} bg="#ede9fe" fg="#7c3aed" />
+        <StatCard icon={Landmark} label="Owners" value={ownersInScope.length} bg="#fef3c7" fg="#b45309" />
         <StatCard icon={FileWarning} label="Unpaid" value={unpaidBills.length} sub={moneyCompact(unpaidTotal)} title={money(unpaidTotal)} bg="#ffedd5" fg="#ea580c" />
         <StatCard icon={Wallet} label="Collection" value={moneyCompact(collected)} title={money(collected)} sub={monthFilter === 'all' ? 'All time' : monthFilter} bg="#ccfbf1" fg="#0d9488" />
       </div>

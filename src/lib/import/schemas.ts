@@ -154,6 +154,19 @@ export const RESIDENTS_DEF: ImportEntityDef = {
       aliases: ['dataprocessingconsent'], example: '' },
     { key: 'type', label: 'Type', type: 'enum', required: false, enumValues: ['Tenant', 'Owner'], defaultValue: 'Tenant',
       aliases: ['type', 'residenttype', 'persontype', 'occupanttype', 'category'], example: 'Tenant' },
+    // Independent role flags - a person can be a Resident, an Owner, or
+    // both at once (ownership never implies residency). When mapped, these
+    // take priority over the legacy `type` column above; when left
+    // unmapped, the commit step derives them from `type` for backward
+    // compatibility with a workbook that only ever had a single Type
+    // column (see engine.ts). A sheet with no Type column at all (e.g. a
+    // pure "Owners" tab) should set a manual/fixed value for `type` (or
+    // for `isOwner`) during mapping so every row imports with the correct
+    // role instead of silently defaulting to Tenant.
+    { key: 'isResident', label: 'Is Resident (optional)', type: 'boolean', required: false,
+      aliases: ['isresident', 'resident', 'liveshere', 'occupiesunit'], example: '' },
+    { key: 'isOwner', label: 'Is Owner (optional)', type: 'boolean', required: false,
+      aliases: ['isowner', 'owner', 'ownerflag'], example: '' },
     { key: 'status', label: 'Status', type: 'enum', required: false, enumValues: ['current', 'former'], defaultValue: 'current',
       aliases: ['status', 'residentstatus', 'currentstatus', 'occupancystatus'], example: 'current' },
     { key: 'moveInDate', label: 'Move-In Date', type: 'date', required: false,
@@ -165,9 +178,14 @@ export const RESIDENTS_DEF: ImportEntityDef = {
     { key: 'externalId', label: 'Source ID (optional)', type: 'string', required: false,
       aliases: ['personid', 'residentid', 'sourceid', 'externalid', 'recordid'], example: '' },
   ],
-  // Prefer matching by the file's own ID column, then ID number, then
-  // falling back to building + flat + name.
-  matchKeyGroups: [['externalId'], ['idNumber'], ['buildingId', 'flatId', 'name']],
+  // Matching priority: the file's own ID column, then a government ID
+  // number, then normalized phone, then normalized email (all far more
+  // reliable than name alone - and normalized specially, not with generic
+  // header-normalization, since that would strip meaningful punctuation
+  // out of an email/phone - see normalizeMatchValue in import/engine.ts),
+  // finally falling back to building + flat + name for files with none of
+  // those.
+  matchKeyGroups: [['externalId'], ['idNumber'], ['mobile'], ['email'], ['buildingId', 'flatId', 'name']],
 };
 
 export const EXPENSES_DEF: ImportEntityDef = {

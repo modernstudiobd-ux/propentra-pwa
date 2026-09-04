@@ -320,6 +320,48 @@ export class PropentraDB extends Dexie {
           await tx.table('sequences').put({ entity: spec.table, value: counter });
         }
       });
+
+    // v9: Ownership and residency become independent relationships instead
+    // of one mutually-exclusive `type` field. Adds indexed `isResident`/
+    // `isOwner` booleans to every resident (Person) record - purely
+    // additive, existing `type`/every other field is left untouched.
+    // Backfill preserves current behavior exactly for every existing
+    // single-role record: type 'Tenant' -> isResident=true, isOwner=false;
+    // type 'Owner' -> isResident=false, isOwner=true. A person who is both
+    // an owner and a resident of their own flat only ever gets that from
+    // this point forward (via the Residents/Owners screens or a re-import),
+    // since the old schema had no way to express it and there is nothing
+    // safe to infer from a single legacy `type` value.
+    this.version(9)
+      .stores({
+        buildings: '++id, name, externalId, displayId',
+        flats: '++id, buildingId, unitNo, occupancyStatus, lifecycleStatus, externalId, displayId',
+        residents: '++id, name, buildingId, flatId, type, status, externalId, displayId, isResident, isOwner',
+        bills: '++id, invoiceNo, buildingId, flatId, residentId, status, billingMonth',
+        receipts: '++id, receiptNo, invoiceId, residentId, voided',
+        payments: '++id, invoiceId, residentId, date, voided, tenancyId, displayId',
+        settings: '++id',
+        depositTransactions: '++id, residentId, buildingId, flatId, type, date, displayId',
+        maintenanceRequests: '++id, buildingId, flatId, status, priority, reportedDate, displayId',
+        expenses: '++id, buildingId, flatId, category, date, displayId',
+        reminders: '++id, dueDate, status, priority, linkType, linkId, displayId',
+        documents: '++id, linkType, linkId, buildingId, flatId, residentId, category, expiryDate, displayId',
+        auditLog: '++id, entityType, entityId, action, timestamp, residentId',
+        importTemplates: '++id, entity',
+        tenancies: '++id, residentId, flatId, buildingId, occupancyStatus, leaseEnd, displayId',
+        ownerships: '++id, residentId, flatId, buildingId, status, displayId',
+        contacts: '++id, residentId, type, displayId',
+        emergencyContacts: '++id, residentId, isPrimary, displayId',
+        vehicles: '++id, residentId, flatId, buildingId, plate, status, displayId',
+        parkingSpaces: '++id, buildingId, flatId, residentId, status, displayId',
+        sequences: 'entity',
+      })
+      .upgrade(async (tx) => {
+        await tx.table('residents').toCollection().modify((r: any) => {
+          if (r.isResident === undefined) r.isResident = r.type !== 'Owner';
+          if (r.isOwner === undefined) r.isOwner = r.type === 'Owner';
+        });
+      });
   }
 }
 

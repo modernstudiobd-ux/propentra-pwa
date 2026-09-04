@@ -80,7 +80,15 @@ export interface Resident {
   flatId: number;
   buildingId: number;
   unitLabel: string; // denormalized e.g. "A-3"
+  /** @deprecated Kept for backward compatibility (older records, badge display, bulk-add convenience) - no longer the source of truth for whether this person is a resident and/or an owner. Use `isResident`/`isOwner` (and lib/roles.ts helpers, which fall back to this field for any record that predates it) instead. Ownership does NOT imply residency and vice versa - a person can be a Resident, an Owner, or both at once, independently. */
   type: ResidentType;
+  // Independent role flags - a person can be a Resident, an Owner, or both.
+  // Optional so every pre-existing record (which only ever had `type`)
+  // keeps working unchanged - see lib/roles.ts for the fallback derivation
+  // (`isResident ?? type !== 'Owner'`, `isOwner ?? type === 'Owner'`) used
+  // everywhere these should be read, rather than reading the fields directly.
+  isResident?: boolean;
+  isOwner?: boolean;
   status: ResidentStatus;
   moveInDate?: string; // ISO date
   moveOutDate?: string; // ISO date - only set once status is 'former'

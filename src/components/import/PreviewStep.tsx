@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, ArrowLeft, AlertCircle, CheckCircle2, Copy, UploadCloud } from 'lucide-react';
+import { ArrowRight, ArrowLeft, AlertCircle, AlertTriangle, CheckCircle2, Copy, UploadCloud } from 'lucide-react';
 import type { ImportEntityDef } from '@/lib/import/schemas';
 import type { ProcessedRow, DuplicateDecision } from '@/lib/import/engine';
 
@@ -17,18 +17,20 @@ export default function PreviewStep({
   onImport: () => void;
   importing: boolean;
 }) {
-  const [filter, setFilter] = useState<'all' | 'errors' | 'duplicates'>('all');
+  const [filter, setFilter] = useState<'all' | 'errors' | 'duplicates' | 'ambiguous'>('all');
 
   const counts = useMemo(() => {
     const errorCount = rows.filter((r) => r.errors.length > 0).length;
     const duplicateCount = rows.filter((r) => r.duplicate).length;
-    const willImport = rows.filter((r) => r.included && r.errors.length === 0 && !(r.duplicate && r.decision === 'skip')).length;
-    return { errorCount, duplicateCount, willImport, total: rows.length };
+    const ambiguousCount = rows.filter((r) => r.ambiguousMatch).length;
+    const willImport = rows.filter((r) => r.included && r.errors.length === 0 && !r.ambiguousMatch && !(r.duplicate && r.decision === 'skip')).length;
+    return { errorCount, duplicateCount, ambiguousCount, willImport, total: rows.length };
   }, [rows]);
 
   const visibleRows = useMemo(() => {
     if (filter === 'errors') return rows.filter((r) => r.errors.length > 0);
     if (filter === 'duplicates') return rows.filter((r) => r.duplicate);
+    if (filter === 'ambiguous') return rows.filter((r) => r.ambiguousMatch);
     return rows;
   }, [rows, filter]);
 
@@ -50,7 +52,7 @@ export default function PreviewStep({
         <p className="text-sm text-gray-500">Review what will be imported. Rows with errors are excluded automatically — fix your file and re-upload, or continue with the valid rows.</p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         <button onClick={() => setFilter('all')} className={`rounded-xl px-3 py-2 text-left ${filter === 'all' ? 'bg-brand-50 ring-1 ring-brand-200' : 'bg-gray-50'}`}>
           <div className="text-xs text-gray-400">Total Rows</div>
           <div className="font-semibold text-gray-800">{counts.total}</div>
@@ -67,7 +69,18 @@ export default function PreviewStep({
           <div className="text-xs text-amber-600 flex items-center gap-1"><Copy size={11} /> Duplicates</div>
           <div className="font-semibold text-amber-700">{counts.duplicateCount}</div>
         </button>
+        <button onClick={() => setFilter('ambiguous')} className={`rounded-xl px-3 py-2 text-left ${filter === 'ambiguous' ? 'ring-1 ring-orange-200' : ''} bg-orange-50`}>
+          <div className="text-xs text-orange-600 flex items-center gap-1"><AlertTriangle size={11} /> Ambiguous</div>
+          <div className="font-semibold text-orange-700">{counts.ambiguousCount}</div>
+        </button>
       </div>
+
+      {counts.ambiguousCount > 0 && (
+        <div className="flex flex-wrap items-center gap-2 bg-orange-50 rounded-xl p-3">
+          <AlertTriangle size={15} className="text-orange-500 shrink-0" />
+          <span className="text-sm text-orange-700">{counts.ambiguousCount} row{counts.ambiguousCount > 1 ? 's' : ''} match more than one existing record on the same field (e.g. a shared phone number already on file) - they're skipped automatically rather than guessed. Fix the source data or matching field and re-import to include them.</span>
+        </div>
+      )}
 
       {counts.duplicateCount > 0 && (
         <div className="flex flex-wrap items-center gap-2 bg-amber-50 rounded-xl p-3">
@@ -93,6 +106,7 @@ export default function PreviewStep({
           <tbody>
             {visibleRows.map((row) => {
               const hasError = row.errors.length > 0;
+              const isAmbiguous = !hasError && !!row.ambiguousMatch;
               return (
                 <tr key={row.rowIndex} className="border-t border-gray-50">
                   <td className="table-td text-gray-400">{row.rowIndex + 1}</td>
@@ -100,6 +114,10 @@ export default function PreviewStep({
                     {hasError ? (
                       <span className="flex items-center gap-1 text-red-500 text-xs" title={row.errors.join(' ')}>
                         <AlertCircle size={13} /> Error
+                      </span>
+                    ) : isAmbiguous ? (
+                      <span className="flex items-center gap-1 text-orange-600 text-xs" title={row.ambiguousMatch}>
+                        <AlertTriangle size={13} /> Ambiguous
                       </span>
                     ) : row.duplicate ? (
                       <span className="flex items-center gap-1 text-amber-600 text-xs"><Copy size={13} /> Duplicate</span>
@@ -114,6 +132,8 @@ export default function PreviewStep({
                   <td className="table-td">
                     {hasError ? (
                       <span className="text-xs text-red-400" title={row.errors.join(' ')}>{row.errors[0]}</span>
+                    ) : isAmbiguous ? (
+                      <span className="text-xs text-orange-500" title={row.ambiguousMatch}>Skipped - review manually</span>
                     ) : row.duplicate ? (
                       <select
                         className="input !py-1 !text-xs !w-auto"

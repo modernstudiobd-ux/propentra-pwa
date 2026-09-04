@@ -11,7 +11,7 @@ import {
   LEASE_TYPES, PAYMENT_FREQUENCIES, TENANCY_OCCUPANCY_STATUSES,
   OWNERSHIP_TYPES, OWNERSHIP_STATUSES,
   CONTACT_TYPES, VEHICLE_TYPES, VEHICLE_STATUSES,
-  type Tenancy, type Ownership, type Contact, type EmergencyContact, type Vehicle, type ResidentType,
+  type Tenancy, type Ownership, type Contact, type EmergencyContact, type Vehicle,
 } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -353,11 +353,13 @@ function VehiclesPanel({ residentId, flatId, buildingId }: { residentId: number;
   );
 }
 
-export default function ResidentExtras({ residentId, flatId, buildingId, type }: { residentId: number; flatId: number; buildingId: number; type: ResidentType }) {
+export default function ResidentExtras({ residentId, flatId, buildingId, isResident, isOwner }: { residentId: number; flatId: number; buildingId: number; isResident: boolean; isOwner: boolean }) {
   return (
     <div>
-      {type === 'Tenant' && <TenancyPanel residentId={residentId} flatId={flatId} buildingId={buildingId} />}
-      {type === 'Owner' && <OwnershipPanel residentId={residentId} flatId={flatId} buildingId={buildingId} />}
+      {/* Residency and ownership are independent - both panels can show at
+          once for someone who owns and lives in their own flat. */}
+      {isResident && <TenancyPanel residentId={residentId} flatId={flatId} buildingId={buildingId} />}
+      {isOwner && <OwnershipPanel residentId={residentId} flatId={flatId} buildingId={buildingId} />}
       <ContactsPanel residentId={residentId} />
       <VehiclesPanel residentId={residentId} flatId={flatId} buildingId={buildingId} />
     </div>

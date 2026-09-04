@@ -7,6 +7,7 @@ import Dashboard from '@/pages/Dashboard';
 import Buildings from '@/pages/Buildings';
 import Flats from '@/pages/Flats';
 import Residents from '@/pages/Residents';
+import Owners from '@/pages/Owners';
 import BillGenerator from '@/pages/BillGenerator';
 import BillsHistory from '@/pages/BillsHistory';
 import Payments from '@/pages/Payments';
@@ -64,6 +65,7 @@ export default function App() {
           <Route path="/buildings" element={<Buildings />} />
           <Route path="/flats" element={<Flats />} />
           <Route path="/residents" element={<Residents />} />
+          <Route path="/owners" element={<Owners />} />
           <Route path="/billing/generator" element={<BillGenerator />} />
           <Route path="/billing/history" element={<BillsHistory />} />
           <Route path="/billing/payments" element={<Payments />} />

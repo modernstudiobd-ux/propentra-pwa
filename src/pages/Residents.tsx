@@ -13,6 +13,7 @@ import { validateImageFileContent, maskIdNumber } from '@/lib/fileValidation';
 import { logAudit } from '@/lib/audit';
 import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
 import ResidentExtras from '@/components/residents/ResidentExtras';
+import { residentIsResident, residentIsOwner } from '@/lib/roles';
 import type { Resident, ResidentType, ResidentStatus } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -21,7 +22,7 @@ const emptyForm = (flats: { id?: number; buildingId: number; unitNo: string }[])
   const f = flats[0];
   return {
     name: '', firstName: '', lastName: '', mobile: '', email: '', flatId: f?.id ?? 0, buildingId: f?.buildingId ?? 0, unitLabel: f?.unitNo ?? '',
-    type: 'Tenant', status: 'current', moveInDate: todayISO(), moveOutDate: '', isBillingContact: true,
+    type: 'Tenant', isResident: true, isOwner: false, status: 'current', moveInDate: todayISO(), moveOutDate: '', isBillingContact: true,
     idType: '', idNumber: '', idIssueDate: '', idExpiryDate: '', idDocumentBlob: undefined, idDocumentFileType: '',
   };
 };
@@ -94,9 +95,17 @@ export default function Residents() {
     }, 0);
   };
 
+  // This view is Residents ONLY - people who occupy a unit. An Owner who
+  // does not also live in a flat (an "offsite owner") has no Resident
+  // relationship and must never appear here or count toward a resident
+  // headcount; see the Owners page for ownership. A person who is both an
+  // owner and a resident of their own flat still appears here (with an
+  // "Also Owner" badge) because the Resident relationship is independent
+  // of the Owner one - see lib/roles.ts.
   const filtered = residents.filter((r) =>
+    residentIsResident(r) &&
     (showArchived || !r.archived) &&
-    (typeFilter === 'all' || r.type === typeFilter) &&
+    (typeFilter === 'all' || (typeFilter === 'Owner' ? residentIsOwner(r) : !residentIsOwner(r))) &&
     (statusFilter === 'all' || statusOf(r) === statusFilter) &&
     (r.name.toLowerCase().includes(query.toLowerCase()) || r.email.toLowerCase().includes(query.toLowerCase()))
   );
@@ -128,7 +137,7 @@ export default function Residents() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] text-gray-400 font-mono">{r.displayId ?? '—'}</span>
               <span className="font-medium text-gray-800">{r.name}</span>
-              <span className={r.type === 'Owner' ? 'badge-partial' : 'badge-paid'}>{r.type === 'Owner' ? 'Flat Owner' : 'Tenant'}</span>
+              <span className={residentIsOwner(r) ? 'badge-partial' : 'badge-paid'}>{residentIsOwner(r) ? 'Owner-Occupied' : 'Tenant'}</span>
               <span className={statusOf(r) === 'current' ? 'badge-paid' : 'badge-unpaid'}>{statusOf(r) === 'current' ? 'Current' : 'Former'}</span>
               {r.archived && <span className="badge-partial">Archived</span>}
               {isBillingContactOf(r) && statusOf(r) === 'current' && (
@@ -168,6 +177,7 @@ export default function Residents() {
     setRevealId(false); setRevealDoc(false);
     setForm({
       ...r, status: statusOf(r), isBillingContact: isBillingContactOf(r),
+      isResident: residentIsResident(r), isOwner: residentIsOwner(r),
       firstName: r.firstName ?? '', lastName: r.lastName ?? '',
       moveInDate: r.moveInDate ?? '', moveOutDate: r.moveOutDate ?? '',
       idType: r.idType ?? '', idNumber: r.idNumber ?? '', idIssueDate: r.idIssueDate ?? '', idExpiryDate: r.idExpiryDate ?? '',
@@ -203,6 +213,15 @@ export default function Residents() {
       alert('ID expiry date must be after the issue date.');
       return;
     }
+
+    // Residency and ownership are independent - a person just needs to be
+    // at least one of the two. Neither checked is never a valid state on
+    // this page (Residents), so default back to Resident if both got
+    // unchecked. `type` is kept in sync only for legacy screens that still
+    // read it for a simple badge label - isResident/isOwner remain the
+    // real source of truth (see lib/roles.ts).
+    if (!form.isResident && !form.isOwner) form.isResident = true;
+    form.type = form.isOwner ? 'Owner' : 'Tenant';
 
     // Adding a new current resident to a flat that already has one is often
     // intentional (owner + tenant, roommates) but sometimes a mistake
@@ -302,10 +321,14 @@ export default function Residents() {
     { key: 'lastName', label: 'Last Name', type: 'text', placeholder: 'Doe' },
     { key: 'mobile', label: 'Mobile', type: 'text' },
     { key: 'email', label: 'Email', type: 'text' },
-    { key: 'type', label: 'Type', type: 'select', options: ['Tenant', 'Owner'] },
+    { key: 'type', label: 'Role', type: 'select', options: [{ value: 'Tenant', label: 'Tenant' }, { value: 'Owner', label: 'Owner-Occupied' }] },
     { key: 'flatId', label: 'Flat', type: 'select', options: flats.map((f) => ({ value: String(f.id), label: `${buildingName(f.buildingId)} · ${f.unitNo}` })), required: true },
   ];
 
+  // Bulk Add lives on the Residents page, so every row is always a
+  // Resident. "Owner-Occupied" additionally marks isOwner - it never
+  // creates an offsite-owner-only record (those belong on the Owners page,
+  // since they must NOT show up here or count as a resident).
   async function commitBulkAdd(rows: BulkResidentRow[]) {
     const ids = await nextDisplayIds('residents', rows.length);
     await db.transaction('rw', [db.residents, db.auditLog], async () => {
@@ -317,6 +340,7 @@ export default function Residents() {
         const newId = await db.residents.add({
           ...emptyForm(flats), name, firstName: r.firstName.trim(), lastName: r.lastName.trim(),
           mobile: r.mobile.trim(), email: r.email.trim(), type: r.type,
+          isResident: true, isOwner: r.type === 'Owner',
           flatId: flat.id!, buildingId: flat.buildingId, unitLabel: flat.unitNo,
           displayId: ids[i],
         });
@@ -343,9 +367,9 @@ export default function Residents() {
             <option value="all">All</option>
           </select>
           <select className="input sm:w-40" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as any)}>
-            <option value="all">All Types</option>
-            <option value="Tenant">Tenant</option>
-            <option value="Owner">Flat Owner</option>
+            <option value="all">All Residents</option>
+            <option value="Tenant">Tenant Only</option>
+            <option value="Owner">Owner-Occupied</option>
           </select>
           <button
             onClick={() => setShowArchived((v) => !v)}
@@ -443,11 +467,18 @@ export default function Residents() {
                 setForm({ ...form, lastName, name: composeName(form.firstName, lastName) });
               }} /></div>
           </div>
-          <div><label className="label">Type</label>
-            <select className="input" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value as ResidentType })}>
-              <option value="Tenant">Tenant</option>
-              <option value="Owner">Flat Owner</option>
-            </select></div>
+          <div>
+            <label className="label">Role</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={form.isResident ?? true} onChange={(e) => setForm({ ...form, isResident: e.target.checked })} /> Resident (lives here)
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={form.isOwner ?? false} onChange={(e) => setForm({ ...form, isOwner: e.target.checked })} /> Also owns this flat
+              </label>
+            </div>
+            <div className="text-[11px] text-gray-400 mt-1">A person can be a resident, an owner, or both. Offsite owners who don't live here belong on the Owners page instead.</div>
+          </div>
           <div><label className="label">Mobile (optional)</label>
             <input className="input" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} /></div>
           <div><label className="label">Email (optional)</label>
@@ -538,7 +569,7 @@ export default function Residents() {
           </div>
 
           {form.id && form.flatId && form.buildingId && (
-            <ResidentExtras residentId={form.id} flatId={form.flatId} buildingId={form.buildingId} type={form.type} />
+            <ResidentExtras residentId={form.id} flatId={form.flatId} buildingId={form.buildingId} isResident={form.isResident ?? true} isOwner={form.isOwner ?? false} />
           )}
           {!form.id && (
             <div className="text-[11px] text-gray-400 pt-2 border-t border-gray-100">Save this resident first to add tenancy/ownership details, contacts, and vehicles.</div>
