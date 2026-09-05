@@ -14,6 +14,8 @@ export interface ImportFieldDef {
   type: ImportFieldType;
   required: boolean;
   enumValues?: readonly string[];
+  /** Extra input variants that should resolve to one of `enumValues`, keyed by lowercased raw cell text (e.g. `{ 'flat owner': 'Owner' }`). Lets a role/category field recognize a real-world sheet's own wording without silently falling back to `defaultValue` and mislabeling the row. */
+  synonyms?: Record<string, string>;
   defaultValue?: any;
   refEntity?: 'building' | 'flat' | 'resident'; // this column's text must resolve to another entity's id
   aliases: string[]; // header-name guesses used for auto-mapping (normalized at match time)
@@ -153,7 +155,18 @@ export const RESIDENTS_DEF: ImportEntityDef = {
     { key: 'dataProcessingConsent', label: 'Data Processing Consent', type: 'boolean', required: false,
       aliases: ['dataprocessingconsent'], example: '' },
     { key: 'type', label: 'Type', type: 'enum', required: false, enumValues: ['Tenant', 'Owner'], defaultValue: 'Tenant',
-      aliases: ['type', 'residenttype', 'persontype', 'occupanttype', 'category'], example: 'Tenant' },
+      aliases: ['type', 'residenttype', 'persontype', 'occupanttype', 'category'],
+      // Real-world sheets label this column all sorts of ways ("Flat Owner",
+      // "Homeowner", "Renter"...) - without this, any spelling the two exact
+      // enum values don't cover would silently fall back to defaultValue
+      // ('Tenant'), quietly mislabeling every owner row as a tenant instead
+      // of surfacing a mapping problem.
+      synonyms: {
+        'flat owner': 'Owner', 'property owner': 'Owner', 'unit owner': 'Owner', 'homeowner': 'Owner',
+        'landlord': 'Owner', 'proprietor': 'Owner', 'owner-occupant': 'Owner', 'owner occupant': 'Owner',
+        'renter': 'Tenant', 'lessee': 'Tenant', 'occupant': 'Tenant', 'leaseholder': 'Tenant',
+      },
+      example: 'Tenant' },
     // Independent role flags - a person can be a Resident, an Owner, or
     // both at once (ownership never implies residency). When mapped, these
     // take priority over the legacy `type` column above; when left

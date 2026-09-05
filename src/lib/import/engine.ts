@@ -101,6 +101,8 @@ function coerceValue(cell: any, field: ImportFieldDef): { value: any; error?: st
       const s = String(cell).trim();
       const match = field.enumValues?.find((v) => v.toLowerCase() === s.toLowerCase());
       if (match) return { value: match };
+      const synonym = field.synonyms?.[s.toLowerCase()];
+      if (synonym && field.enumValues?.includes(synonym)) return { value: synonym };
       if (field.defaultValue !== undefined) return { value: field.defaultValue };
       // An optional field with a value that doesn't match any known option
       // (e.g. a real-world export using "Phone" where this app expects

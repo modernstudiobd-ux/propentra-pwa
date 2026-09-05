@@ -122,6 +122,13 @@ describe('buildProcessedRows - coercion & validation', () => {
     expect(rows[0].record.occupancyStatus).toBe('vacant');
   });
 
+  it('resolves a real-world synonym for an enum field instead of silently defaulting (e.g. "Flat Owner" -> "Owner")', () => {
+    const mapping: Record<string, number> = { buildingRef: -1, flatRef: -1, name: 0, mobile: -1, email: -1, type: 1, status: -1, moveInDate: -1, moveOutDate: -1, isBillingContact: -1, idType: -1, idNumber: -1, firstName: -1, lastName: -1 } as any;
+    const rows = buildProcessedRows(RESIDENTS_DEF, [['Jane Doe', 'Flat Owner']], mapping);
+    expect(rows[0].record.type).toBe('Owner');
+    expect(rows[0].errors).toEqual([]);
+  });
+
   it('coerces boolean-like text for Yes/No fields', () => {
     const mapping: Record<string, number> = { buildingRef: -1, flatRef: -1, name: 0, mobile: -1, email: -1, type: -1, status: -1, moveInDate: -1, moveOutDate: -1, isBillingContact: 1, idType: -1, idNumber: -1, firstName: -1, lastName: -1 } as any;
     const rows = buildProcessedRows(RESIDENTS_DEF, [['Jane Doe', 'No']], mapping);

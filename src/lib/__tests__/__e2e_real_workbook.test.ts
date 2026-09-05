@@ -83,5 +83,16 @@ const FILE_PATH = process.env.E2E_XLSX_PATH;
     const unlocatedResidents = (await db.residents.toArray()).filter((r: any) => !r.buildingId || !r.flatId);
     console.log('Residents still unlocated:', unlocatedResidents.length);
     expect(unlocatedResidents.length).toBe(0);
+
+    // Regression check: the sheet labels owners "Flat Owner" (not the app's
+    // canonical "Owner") in the People tab's Person Type column. Every
+    // resident an Ownership row points to must actually be flagged as an
+    // owner - otherwise the Ownership records exist in the DB but the
+    // people never show up on the Owners page, which looks indistinguishable
+    // from "ownership didn't import" even though the rows were created.
+    const allResidents = await db.residents.toArray();
+    const allOwnerships = await db.ownerships.toArray();
+    const unflaggedOwners = allOwnerships.filter((o) => !allResidents.find((r: any) => r.id === o.residentId)?.isOwner);
+    expect(unflaggedOwners.length, 'Ownership rows point to a resident not flagged isOwner').toBe(0);
   });
 });
