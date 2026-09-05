@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { Plus, Pencil, Trash2, Search, IdCard, Wallet, Building2, Eye, EyeOff, Archive, ArchiveRestore, Layers, AlertCircle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import BulkToolbar from '@/components/BulkToolbar';
 import BulkAddModal, { type BulkAddField } from '@/components/BulkAddModal';
+import PersonDetailModal from '@/components/PersonDetailModal';
 import { useBulkSelection } from '@/hooks/useBulkSelection';
 import { dateLabel } from '@/lib/format';
 import { validateImageFileContent, maskIdNumber } from '@/lib/fileValidation';
@@ -69,6 +70,15 @@ export default function Residents() {
   const [docPreviewUrl, setDocPreviewUrl] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [viewPersonId, setViewPersonId] = useState<number | null>(null);
+  const [searchParams] = useSearchParams();
+
+  // Prefill from the global search bar (e.g. /residents?q=Jane) - one-time on load.
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q) setQuery(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Blobs can't be used directly as an <img src> - build/revoke an object
   // URL only while the document is actually being previewed, so we're never
@@ -160,6 +170,7 @@ export default function Residents() {
           </div>
         </div>
         <div className="flex items-center shrink-0 gap-1">
+          <button onClick={() => setViewPersonId(r.id!)} className="icon-btn text-gray-400" title="View profile"><Eye size={18} /></button>
           <button onClick={() => openEdit(r)} className="icon-btn text-brand-500"><Pencil size={18} /></button>
           {r.archived ? (
             <button onClick={() => unarchive(r)} className="icon-btn text-brand-500" title="Unarchive"><ArchiveRestore size={18} /></button>
@@ -609,6 +620,14 @@ export default function Residents() {
         onConfirm={bulkDelete}
         onCancel={() => setConfirmBulkDelete(false)}
       />
+
+      {viewPersonId !== null && (
+        <PersonDetailModal
+          residentId={viewPersonId}
+          onClose={() => setViewPersonId(null)}
+          onEdit={(r) => { setViewPersonId(null); openEdit(r); }}
+        />
+      )}
     </div>
   );
 }

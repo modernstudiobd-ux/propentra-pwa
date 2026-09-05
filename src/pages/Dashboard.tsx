@@ -5,7 +5,7 @@ import { money, moneyCompact, dateLabel } from '@/lib/format';
 import {
   Building2, Home, Users, FileWarning, Wallet, Eye,
   FileText, Receipt, UserPlus, Layers, Plus, ChevronDown,
-  AlertTriangle, Wrench, BellRing, FolderOpen, PiggyBank, CheckCircle2, ChevronRight, Landmark,
+  AlertTriangle, Wrench, BellRing, FolderOpen, PiggyBank, CheckCircle2, ChevronRight, Landmark, Percent,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Link, useNavigate } from 'react-router-dom';
@@ -76,6 +76,8 @@ export default function Dashboard() {
   const unpaidBills = bills.filter((b) => b.status !== 'paid');
   const unpaidTotal = unpaidBills.reduce((s, b) => s + (b.totalAmount - b.paidAmount), 0);
   const collected = bills.reduce((s, b) => s + b.paidAmount, 0);
+  const occupiedInScope = flatsInScope.filter((f) => f.occupancyStatus === 'occupied').length;
+  const occupancyPct = flatsInScope.length > 0 ? Math.round((occupiedInScope / flatsInScope.length) * 100) : 0;
 
   const paidCount = bills.filter((b) => b.status === 'paid').length;
   const unpaidCount = bills.filter((b) => b.status === 'unpaid').length;
@@ -178,9 +180,10 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
         <StatCard icon={Building2} label="Buildings" value={buildingFilter === 'all' ? buildings.length : 1} bg="#e0f2fe" fg="#0284c7" />
         <StatCard icon={Home} label="Flats" value={flatsInScope.length} bg="#dcfce7" fg="#16a34a" />
+        <StatCard icon={Percent} label="Occupancy" value={`${occupancyPct}%`} sub={`${occupiedInScope}/${flatsInScope.length} occupied`} bg="#e0e7ff" fg="#4338ca" />
         <StatCard icon={Users} label="Residents" value={residentsInScope.length} bg="#ede9fe" fg="#7c3aed" />
         <StatCard icon={Landmark} label="Owners" value={ownersInScope.length} bg="#fef3c7" fg="#b45309" />
         <StatCard icon={FileWarning} label="Unpaid" value={unpaidBills.length} sub={moneyCompact(unpaidTotal)} title={money(unpaidTotal)} bg="#ffedd5" fg="#ea580c" />

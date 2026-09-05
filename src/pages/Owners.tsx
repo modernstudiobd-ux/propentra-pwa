@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useSearchParams } from 'react-router-dom';
 import { db } from '@/lib/db';
-import { Plus, Pencil, Trash2, Search, Landmark, Building2, Archive, ArchiveRestore, Eye, EyeOff, Home } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Landmark, Archive, ArchiveRestore, Eye, EyeOff } from 'lucide-react';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import PersonDetailModal from '@/components/PersonDetailModal';
 import { dateLabel } from '@/lib/format';
 import { logAudit } from '@/lib/audit';
 import { nextDisplayId } from '@/lib/ids';
@@ -133,6 +135,7 @@ export default function Owners() {
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
   const buildings = useLiveQuery(() => db.buildings.toArray(), []) ?? [];
   const ownerships = useLiveQuery(() => db.ownerships.toArray(), []) ?? [];
+  const [searchParams] = useSearchParams();
 
   const [query, setQuery] = useState('');
   const [flatFilter, setFlatFilter] = useState<number | 'all'>('all');
@@ -140,6 +143,14 @@ export default function Owners() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<OwnerFormState>(emptyOwnerForm([]));
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [viewPersonId, setViewPersonId] = useState<number | null>(null);
+
+  // Prefill from the global search bar (e.g. /owners?q=Jane) - one-time on load.
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q) setQuery(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const buildingName = (id: number) => buildings.find((b) => b.id === id)?.name ?? '—';
 
@@ -273,7 +284,58 @@ export default function Owners() {
       </div>
 
       <div className="card overflow-hidden">
-        <div className="divide-y divide-gray-100">
+        <div className="hidden sm:block overflow-x-auto">
+          <table className="w-full min-w-[720px]">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="table-th">ID</th>
+                <th className="table-th">Owner</th>
+                <th className="table-th">Contact</th>
+                <th className="table-th">Flats</th>
+                <th className="table-th">Status</th>
+                <th className="table-th text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filtered.map((r) => {
+                const owned = ownershipsByResident(r.id);
+                const flatLabels = owned.length > 0
+                  ? owned.map((o) => { const f = flats.find((x) => x.id === o.flatId); return f ? `${f.unitNo} (${o.ownershipPct}%)` : null; }).filter(Boolean)
+                  : (r.flatId ? [r.unitLabel] : []);
+                return (
+                  <tr key={r.id} className={r.archived ? 'opacity-60' : ''}>
+                    <td className="table-td font-mono text-xs text-gray-500">{r.displayId ?? '—'}</td>
+                    <td className="table-td font-medium text-gray-800">
+                      <button onClick={() => setViewPersonId(r.id!)} className="hover:text-brand-600 hover:underline">{r.name}</button>
+                    </td>
+                    <td className="table-td text-gray-500">{r.mobile || r.email || '—'}</td>
+                    <td className="table-td text-gray-600">{flatLabels.length > 0 ? flatLabels.join(', ') : 'No flat on file'}</td>
+                    <td className="table-td">
+                      <span className={residentIsResident(r) ? 'badge-paid' : 'badge-partial'}>{residentIsResident(r) ? 'Owner + Resident' : 'Owner only'}</span>
+                      {r.archived && <span className="badge-unpaid ml-1">Archived</span>}
+                    </td>
+                    <td className="table-td text-right">
+                      <button onClick={() => setViewPersonId(r.id!)} className="icon-btn text-gray-400 mr-1" title="View profile"><Eye size={16} /></button>
+                      <button onClick={() => openEdit(r)} className="icon-btn text-brand-500 mr-1"><Pencil size={16} /></button>
+                      {r.archived ? (
+                        <button onClick={() => unarchive(r)} className="icon-btn text-brand-500 mr-1" title="Unarchive"><ArchiveRestore size={16} /></button>
+                      ) : (
+                        <button onClick={() => archive(r)} className="icon-btn text-gray-400 mr-1" title="Archive"><Archive size={16} /></button>
+                      )}
+                      <button onClick={() => setConfirmDeleteId(r.id!)} className="icon-btn text-red-400" title="Permanently delete"><Trash2 size={16} /></button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr><td colSpan={6} className="text-center text-sm text-gray-400 py-8">No owners found</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile card list */}
+        <div className="sm:hidden divide-y divide-gray-100">
           {filtered.map((r) => {
             const owned = ownershipsByResident(r.id);
             const flatLabels = owned.length > 0
@@ -281,20 +343,16 @@ export default function Owners() {
               : (r.flatId ? [`${buildingName(r.buildingId)} · ${r.unitLabel}`] : []);
             return (
               <div key={r.id} className={`p-4 flex items-start justify-between gap-3 ${r.archived ? 'opacity-60' : ''}`}>
-                <div className="min-w-0">
+                <button onClick={() => setViewPersonId(r.id!)} className="min-w-0 text-left">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] text-gray-400 font-mono">{r.displayId ?? '—'}</span>
                     <span className="font-medium text-gray-800">{r.name}</span>
-                    <span className="badge-partial">Owner</span>
-                    {residentIsResident(r) && <span className="badge-paid">Also Resident</span>}
+                    <span className={residentIsResident(r) ? 'badge-paid' : 'badge-partial'}>{residentIsResident(r) ? 'Owner + Resident' : 'Owner only'}</span>
                     {r.archived && <span className="badge-unpaid">Archived</span>}
                   </div>
                   <div className="text-xs text-gray-400 mt-1">{r.mobile || '—'} · {r.email || '—'}</div>
-                  <div className="text-[11px] text-gray-500 mt-1 flex items-start gap-1">
-                    <Home size={12} className="mt-0.5 shrink-0" />
-                    <span>{flatLabels.length > 0 ? flatLabels.join(', ') : 'No flat on file'}</span>
-                  </div>
-                </div>
+                  <div className="text-[11px] text-gray-500 mt-1">{flatLabels.length > 0 ? flatLabels.join(', ') : 'No flat on file'}</div>
+                </button>
                 <div className="flex items-center shrink-0 gap-1">
                   <button onClick={() => openEdit(r)} className="icon-btn text-brand-500"><Pencil size={18} /></button>
                   {r.archived ? (
@@ -309,9 +367,8 @@ export default function Owners() {
           })}
           {filtered.length === 0 && <div className="p-8 text-center text-sm text-gray-400">No owners found</div>}
         </div>
-      </div>
-      <div className="text-xs text-gray-400 px-1 flex items-center gap-1.5">
-        <Building2 size={12} /> Total: {filtered.length} owner{filtered.length !== 1 ? 's' : ''}
+
+        <div className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100">Total: {filtered.length} owner{filtered.length !== 1 ? 's' : ''}</div>
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={form.id ? 'Edit Owner' : 'Add Owner'}>
@@ -369,6 +426,14 @@ export default function Owners() {
         onConfirm={() => confirmDeleteId !== null && remove(confirmDeleteId)}
         onCancel={() => setConfirmDeleteId(null)}
       />
+
+      {viewPersonId !== null && (
+        <PersonDetailModal
+          residentId={viewPersonId}
+          onClose={() => setViewPersonId(null)}
+          onEdit={(r) => { setViewPersonId(null); openEdit(r); }}
+        />
+      )}
     </div>
   );
 }
