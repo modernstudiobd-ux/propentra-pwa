@@ -2,14 +2,15 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import { money, dateLabel } from '@/lib/format';
-import { Plus, Pencil, Trash2, Search, Wrench, Layers } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Wrench, Layers, Receipt } from 'lucide-react';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import BulkToolbar from '@/components/BulkToolbar';
 import BulkAddModal, { type BulkAddField } from '@/components/BulkAddModal';
+import ExpenseFormModal from '@/components/ExpenseFormModal';
 import { useBulkSelection } from '@/hooks/useBulkSelection';
 import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
-import type { MaintenanceRequest, MaintenancePriority, MaintenanceStatus } from '@/types';
+import type { MaintenanceRequest, MaintenancePriority, MaintenanceStatus, Expense } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 
@@ -17,6 +18,19 @@ const emptyForm = (buildingId: number): MaintenanceRequest => ({
   buildingId, flatId: undefined, title: '', description: '', priority: 'medium', status: 'open',
   vendorName: '', vendorContact: '', cost: 0, reportedDate: todayISO(), completedDate: '', notes: '',
 });
+
+/** Builds the Expense draft prefilled from a Maintenance record. Only fields we can map with confidence are filled in - Category is always "Repairs & Maintenance" since that's exactly what this flow represents; anything not on the Maintenance record (e.g. a receipt photo) is simply left for the person to fill in on the Expense form. */
+function expenseDraftFromMaintenance(m: MaintenanceRequest): Expense {
+  return {
+    buildingId: m.buildingId,
+    flatId: m.flatId,
+    category: 'Repairs & Maintenance',
+    amount: m.cost ?? 0,
+    vendor: m.vendorName || '',
+    date: m.completedDate || m.reportedDate || todayISO(),
+    notes: [m.title, m.description].filter((s) => s && s.trim()).join(' — '),
+  };
+}
 
 const PRIORITY_BADGE: Record<MaintenancePriority, string> = {
   low: 'badge-paid', medium: 'badge-partial', high: 'badge-unpaid', urgent: 'badge-unpaid',
@@ -34,6 +48,7 @@ export default function Maintenance() {
   const requests = useLiveQuery(() => db.maintenanceRequests.orderBy('id').reverse().toArray(), []) ?? [];
   const buildings = useLiveQuery(() => db.buildings.toArray(), []) ?? [];
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
+  const expenses = useLiveQuery(() => db.expenses.toArray(), []) ?? [];
 
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | MaintenanceStatus>('all');
@@ -44,9 +59,19 @@ export default function Maintenance() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
 
+  // "Add this as an expense?" flow: a lightweight post-save prompt, plus the
+  // same option surfaced later from a record's Edit/Details view. Both paths
+  // funnel into the one Expense form and the same linkedExpenseId guard, so
+  // a maintenance record can never generate more than one expense.
+  const [expensePromptFor, setExpensePromptFor] = useState<MaintenanceRequest | null>(null);
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [expenseDraft, setExpenseDraft] = useState<Expense>({ buildingId: 0, category: 'Repairs & Maintenance', amount: 0, vendor: '', date: todayISO(), notes: '' });
+  const [expenseSourceId, setExpenseSourceId] = useState<number | null>(null);
+
   const buildingName = (id: number) => buildings.find((b) => b.id === id)?.name ?? '—';
   const flatLabel = (id?: number) => (id ? flats.find((f) => f.id === id)?.unitNo : null);
   const buildingFlats = flats.filter((f) => f.buildingId === form.buildingId);
+  const linkedExpense = (id?: number) => (id ? expenses.find((e) => e.id === id) : undefined);
 
   const filtered = requests.filter((r) =>
     (statusFilter === 'all' || r.status === statusFilter) &&
@@ -59,12 +84,40 @@ export default function Maintenance() {
   function openAdd() { setForm(emptyForm(buildings[0]?.id ?? 0)); setOpen(true); }
   function openEdit(r: MaintenanceRequest) { setForm(r); setOpen(true); }
 
+  function openExpenseFor(m: MaintenanceRequest) {
+    setExpenseSourceId(m.id ?? null);
+    setExpenseDraft(expenseDraftFromMaintenance(m));
+    setExpenseModalOpen(true);
+  }
+
+  /** "Add as Expense" from the Edit/Details modal - closes it first so only one modal is ever on screen at a time. */
+  function addAsExpenseFromDetails() {
+    setOpen(false);
+    openExpenseFor(form);
+  }
+
+  async function onExpenseSaved(saved: Expense & { id: number }) {
+    if (expenseSourceId !== null) {
+      await db.maintenanceRequests.update(expenseSourceId, { linkedExpenseId: saved.id });
+    }
+    setExpenseSourceId(null);
+  }
+
   async function save() {
     if (!form.title.trim() || !form.buildingId) return;
     const payload = { ...form, completedDate: form.status === 'completed' ? (form.completedDate || todayISO()) : form.completedDate };
-    if (form.id) await db.maintenanceRequests.update(form.id, payload);
-    else await db.maintenanceRequests.add({ ...payload, displayId: await nextDisplayId('maintenanceRequests') });
+    let savedId: number;
+    if (form.id) {
+      await db.maintenanceRequests.update(form.id, payload);
+      savedId = form.id;
+    } else {
+      savedId = (await db.maintenanceRequests.add({ ...payload, displayId: await nextDisplayId('maintenanceRequests') })) as number;
+    }
     setOpen(false);
+    const saved: MaintenanceRequest = { ...payload, id: savedId };
+    if ((saved.cost ?? 0) > 0 && !saved.linkedExpenseId) {
+      setExpensePromptFor(saved);
+    }
   }
 
   async function remove(id: number) {
@@ -149,6 +202,11 @@ export default function Maintenance() {
                   {r.vendorName ? ` · ${r.vendorName}` : ''}
                 </div>
                 {r.description && <div className="text-xs text-gray-500 mt-1">{r.description}</div>}
+                {r.linkedExpenseId && (
+                  <div className="text-[11px] text-brand-500 mt-1 flex items-center gap-1">
+                    <Receipt size={11} /> Logged as expense {linkedExpense(r.linkedExpenseId)?.displayId ?? ''}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center shrink-0 gap-2">
@@ -206,6 +264,17 @@ export default function Maintenance() {
           )}
           <div><label className="label">Notes</label>
             <textarea className="input" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></div>
+          {form.id && (form.cost ?? 0) > 0 && (
+            form.linkedExpenseId ? (
+              <div className="text-xs text-gray-500 flex items-center gap-1.5 bg-gray-50 rounded-lg px-3 py-2">
+                <Receipt size={13} className="text-brand-500" /> Already logged as expense {linkedExpense(form.linkedExpenseId)?.displayId ?? ''}
+              </div>
+            ) : (
+              <button type="button" onClick={addAsExpenseFromDetails} className="btn-secondary w-full flex items-center justify-center gap-2">
+                <Receipt size={15} /> Add as Expense
+              </button>
+            )
+          )}
           <div className="flex gap-2 pt-2">
             <button onClick={save} className="btn-primary flex-1">Save</button>
             <button onClick={() => setOpen(false)} className="btn-secondary flex-1">Cancel</button>
@@ -237,6 +306,26 @@ export default function Maintenance() {
         message="This cannot be undone."
         onConfirm={bulkDelete}
         onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      <ConfirmDialog
+        open={!!expensePromptFor}
+        title="Maintenance logged successfully"
+        message="Add this as an expense?"
+        confirmLabel="Add Expense"
+        cancelLabel="Not now"
+        danger={false}
+        onConfirm={() => { if (expensePromptFor) openExpenseFor(expensePromptFor); setExpensePromptFor(null); }}
+        onCancel={() => setExpensePromptFor(null)}
+      />
+
+      <ExpenseFormModal
+        open={expenseModalOpen}
+        onClose={() => setExpenseModalOpen(false)}
+        buildings={buildings}
+        flats={flats}
+        initialExpense={expenseDraft}
+        onSaved={onExpenseSaved}
       />
     </div>
   );

@@ -239,6 +239,8 @@ export interface MaintenanceRequest {
   reportedDate: string; // ISO
   completedDate?: string;
   notes?: string;
+  /** Set once "Add as Expense" has been used for this record, so the prompt/button don't offer to create a second, duplicate expense. */
+  linkedExpenseId?: number;
 }
 
 // --- Expenses ------------------------------------------------------------
