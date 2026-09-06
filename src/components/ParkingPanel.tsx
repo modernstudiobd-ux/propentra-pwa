@@ -10,11 +10,12 @@ import { useBulkSelection } from '@/hooks/useBulkSelection';
 import type { Flat, ParkingSpace } from '@/types';
 import { PARKING_TYPES, PARKING_STATUSES } from '@/types';
 import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
+import { PARKING_SPACES_DEF, fieldAliases } from '@/lib/import/schemas';
 
 type BulkParkingRow = { spaceNumber: string; type: string };
 const bulkParkingFields: BulkAddField<BulkParkingRow>[] = [
-  { key: 'spaceNumber', label: 'Space Number', type: 'text', required: true, placeholder: 'P-12' },
-  { key: 'type', label: 'Type', type: 'select', options: [...PARKING_TYPES] },
+  { key: 'spaceNumber', label: 'Space Number', type: 'text', required: true, placeholder: 'P-12', aliases: fieldAliases(PARKING_SPACES_DEF, 'spaceNumber') },
+  { key: 'type', label: 'Type', type: 'select', options: [...PARKING_TYPES], aliases: fieldAliases(PARKING_SPACES_DEF, 'type') },
 ];
 const bulkParkingEmptyRow = (): BulkParkingRow => ({ spaceNumber: '', type: 'Uncovered' });
 

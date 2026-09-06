@@ -79,10 +79,10 @@ export default function Maintenance() {
   }
 
   const BULK_FIELDS: BulkAddField<BulkRow>[] = [
-    { key: 'title', label: 'Title', type: 'text', required: true, placeholder: 'e.g. Leaking pipe' },
-    { key: 'priority', label: 'Priority', type: 'select', options: ['low', 'medium', 'high', 'urgent'] },
-    { key: 'vendorName', label: 'Vendor', type: 'text' },
-    { key: 'cost', label: 'Cost', type: 'number' },
+    { key: 'title', label: 'Title', type: 'text', required: true, placeholder: 'e.g. Leaking pipe', aliases: ['title', 'issue', 'summary', 'description', 'request', 'subject'] },
+    { key: 'priority', label: 'Priority', type: 'select', options: ['low', 'medium', 'high', 'urgent'], aliases: ['priority', 'urgency', 'severity'] },
+    { key: 'vendorName', label: 'Vendor', type: 'text', aliases: ['vendor', 'vendorname', 'contractor', 'company', 'servicedby', 'assignedto'] },
+    { key: 'cost', label: 'Cost', type: 'number', aliases: ['cost', 'amount', 'expense', 'price', 'total'] },
   ];
 
   async function commitBulkAdd(rows: BulkRow[]) {

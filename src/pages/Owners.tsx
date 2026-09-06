@@ -2,19 +2,26 @@ import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useSearchParams } from 'react-router-dom';
 import { db } from '@/lib/db';
-import { Plus, Pencil, Trash2, Search, Landmark, Archive, ArchiveRestore, Eye, EyeOff } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Landmark, Archive, ArchiveRestore, Eye, EyeOff, Layers } from 'lucide-react';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import BulkAddModal, { type BulkAddField } from '@/components/BulkAddModal';
 import PersonDetailModal from '@/components/PersonDetailModal';
 import { dateLabel } from '@/lib/format';
 import { logAudit } from '@/lib/audit';
-import { nextDisplayId } from '@/lib/ids';
+import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
 import { residentIsResident, residentIsOwner } from '@/lib/roles';
 import { validateOwnershipPct } from '@/lib/ownership';
 import { OWNERSHIP_TYPES, OWNERSHIP_STATUSES } from '@/types';
+import { RESIDENTS_DEF, OWNERSHIPS_DEF, fieldAliases } from '@/lib/import/schemas';
 import type { Resident, Ownership } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
+
+interface BulkOwnerRow {
+  firstName: string; lastName: string; mobile: string; email: string;
+  alsoResident: boolean; flatId: string; ownershipPct: number | ''; purchaseDate: string; ownershipType: string;
+}
 
 interface OwnerFormState {
   id?: number;
@@ -141,6 +148,7 @@ export default function Owners() {
   const [flatFilter, setFlatFilter] = useState<number | 'all'>('all');
   const [showArchived, setShowArchived] = useState(false);
   const [open, setOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [form, setForm] = useState<OwnerFormState>(emptyOwnerForm([]));
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [viewPersonId, setViewPersonId] = useState<number | null>(null);
@@ -258,6 +266,59 @@ export default function Owners() {
     await logAudit({ action: 'resident_unarchived', entityType: 'resident', entityId: r.id, residentId: r.id, summary: `Unarchived owner ${r.name}` });
   }
 
+  const BULK_FIELDS: BulkAddField<BulkOwnerRow>[] = [
+    { key: 'firstName', label: 'First Name', type: 'text', required: true, placeholder: 'Jane', aliases: fieldAliases(RESIDENTS_DEF, 'firstName') },
+    { key: 'lastName', label: 'Last Name', type: 'text', placeholder: 'Doe', aliases: fieldAliases(RESIDENTS_DEF, 'lastName') },
+    { key: 'mobile', label: 'Mobile', type: 'text', aliases: fieldAliases(RESIDENTS_DEF, 'mobile') },
+    { key: 'email', label: 'Email', type: 'text', aliases: fieldAliases(RESIDENTS_DEF, 'email') },
+    { key: 'flatId', label: 'Flat', type: 'select', options: flats.map((f) => ({ value: String(f.id), label: `${buildingName(f.buildingId)} · ${f.unitNo}` })), required: true, aliases: fieldAliases(OWNERSHIPS_DEF, 'flatRef') },
+    { key: 'ownershipPct', label: 'Ownership %', type: 'number', aliases: fieldAliases(OWNERSHIPS_DEF, 'ownershipPct') },
+    { key: 'ownershipType', label: 'Type', type: 'select', options: [...OWNERSHIP_TYPES], aliases: fieldAliases(OWNERSHIPS_DEF, 'ownershipType') },
+    { key: 'purchaseDate', label: 'Purchase Date', type: 'date', aliases: fieldAliases(OWNERSHIPS_DEF, 'purchaseDate') },
+    { key: 'alsoResident', label: 'Also Resident', type: 'checkbox', aliases: fieldAliases(RESIDENTS_DEF, 'isResident') },
+  ];
+  const bulkOwnerEmptyRow = (): BulkOwnerRow => ({
+    firstName: '', lastName: '', mobile: '', email: '', alsoResident: false,
+    flatId: String(flats[0]?.id ?? ''), ownershipPct: 100, purchaseDate: todayISO(), ownershipType: 'Sole',
+  });
+
+  // Each row creates one Resident (owner, optionally also resident) plus
+  // its own Ownership record for the chosen flat - mirroring what the
+  // single Add Owner form does, just for many rows at once.
+  async function commitBulkAdd(rows: BulkOwnerRow[]) {
+    const validRows = rows.filter((r) => flats.some((f) => String(f.id) === r.flatId));
+    if (validRows.length === 0) return;
+    const residentIds = await nextDisplayIds('residents', validRows.length);
+    const ownershipIds = await nextDisplayIds('ownerships', validRows.length);
+    await db.transaction('rw', [db.residents, db.ownerships, db.auditLog], async () => {
+      for (let i = 0; i < validRows.length; i++) {
+        const r = validRows[i];
+        const flat = flats.find((f) => String(f.id) === r.flatId)!;
+        const name = [r.firstName, r.lastName].filter((s) => s.trim()).join(' ').trim();
+        const pct = r.ownershipPct === '' ? 100 : Number(r.ownershipPct);
+        const residentId = (await db.residents.add({
+          name, firstName: r.firstName.trim(), lastName: r.lastName.trim(), mobile: r.mobile.trim(), email: r.email.trim(),
+          flatId: flat.id!, buildingId: flat.buildingId, unitLabel: flat.unitNo,
+          type: r.alsoResident ? 'Tenant' : 'Owner', isOwner: true, isResident: r.alsoResident,
+          status: 'current', moveInDate: r.alsoResident ? todayISO() : undefined, isBillingContact: false,
+          displayId: residentIds[i],
+        } as Resident)) as number;
+
+        await db.ownerships.add({
+          residentId, flatId: flat.id!, buildingId: flat.buildingId, status: 'active',
+          ownershipPct: pct, purchaseDate: r.purchaseDate || todayISO(), ownershipType: r.ownershipType || 'Sole',
+          displayId: ownershipIds[i],
+        });
+
+        await logAudit({
+          action: 'resident_created', entityType: 'resident', entityId: residentId,
+          buildingId: flat.buildingId, flatId: flat.id, residentId,
+          summary: `Added owner ${name}${r.alsoResident ? ' (also resident)' : ''} (bulk import)`,
+        });
+      }
+    });
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
@@ -277,10 +338,15 @@ export default function Owners() {
             {showArchived ? <EyeOff size={14} /> : <Eye size={14} />} {showArchived ? 'Hide archived' : 'Show archived'}
           </button>
         </div>
-        <button onClick={openAdd} className="btn-primary flex items-center gap-2 justify-center" disabled={flats.length === 0}
-          title={flats.length === 0 ? 'Add a flat first before adding owners' : undefined}>
-          <Plus size={16} /> Add Owner
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setBulkOpen(true)} className="btn-secondary flex items-center gap-2 justify-center" disabled={flats.length === 0}>
+            <Layers size={16} /> Bulk Add
+          </button>
+          <button onClick={openAdd} className="btn-primary flex items-center gap-2 justify-center" disabled={flats.length === 0}
+            title={flats.length === 0 ? 'Add a flat first before adding owners' : undefined}>
+            <Plus size={16} /> Add Owner
+          </button>
+        </div>
       </div>
 
       <div className="card overflow-hidden">
@@ -418,6 +484,13 @@ export default function Owners() {
           </div>
         </div>
       </Modal>
+
+      <BulkAddModal<BulkOwnerRow>
+        open={bulkOpen} onClose={() => setBulkOpen(false)} title="Bulk Add Owners" entityLabel="owner"
+        fields={BULK_FIELDS} makeEmptyRow={bulkOwnerEmptyRow}
+        isRowBlank={(r) => !r.firstName.trim() && !r.lastName.trim()}
+        onCommit={commitBulkAdd}
+      />
 
       <ConfirmDialog
         open={confirmDeleteId !== null}

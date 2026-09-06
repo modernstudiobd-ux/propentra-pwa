@@ -15,6 +15,7 @@ import { logAudit } from '@/lib/audit';
 import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
 import ResidentExtras from '@/components/residents/ResidentExtras';
 import { residentIsResident, residentIsOwner } from '@/lib/roles';
+import { RESIDENTS_DEF, fieldAliases } from '@/lib/import/schemas';
 import type { Resident, ResidentType, ResidentStatus } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -328,12 +329,12 @@ export default function Residents() {
   }
 
   const BULK_FIELDS: BulkAddField<BulkResidentRow>[] = [
-    { key: 'firstName', label: 'First Name', type: 'text', required: true, placeholder: 'Jane' },
-    { key: 'lastName', label: 'Last Name', type: 'text', placeholder: 'Doe' },
-    { key: 'mobile', label: 'Mobile', type: 'text' },
-    { key: 'email', label: 'Email', type: 'text' },
-    { key: 'type', label: 'Role', type: 'select', options: [{ value: 'Tenant', label: 'Tenant' }, { value: 'Owner', label: 'Owner-Occupied' }] },
-    { key: 'flatId', label: 'Flat', type: 'select', options: flats.map((f) => ({ value: String(f.id), label: `${buildingName(f.buildingId)} · ${f.unitNo}` })), required: true },
+    { key: 'firstName', label: 'First Name', type: 'text', required: true, placeholder: 'Jane', aliases: fieldAliases(RESIDENTS_DEF, 'firstName') },
+    { key: 'lastName', label: 'Last Name', type: 'text', placeholder: 'Doe', aliases: fieldAliases(RESIDENTS_DEF, 'lastName') },
+    { key: 'mobile', label: 'Mobile', type: 'text', aliases: fieldAliases(RESIDENTS_DEF, 'mobile') },
+    { key: 'email', label: 'Email', type: 'text', aliases: fieldAliases(RESIDENTS_DEF, 'email') },
+    { key: 'type', label: 'Role', type: 'select', options: [{ value: 'Tenant', label: 'Tenant' }, { value: 'Owner', label: 'Owner-Occupied' }], aliases: fieldAliases(RESIDENTS_DEF, 'type') },
+    { key: 'flatId', label: 'Flat', type: 'select', options: flats.map((f) => ({ value: String(f.id), label: `${buildingName(f.buildingId)} · ${f.unitNo}` })), required: true, aliases: fieldAliases(RESIDENTS_DEF, 'flatRef') },
   ];
 
   // Bulk Add lives on the Residents page, so every row is always a

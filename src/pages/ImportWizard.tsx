@@ -140,7 +140,7 @@ export default function ImportWizard() {
     if (!job || !job.entity) return;
     const def = IMPORT_ENTITIES[job.entity];
     const headers = job.sheet.headers;
-    const autoMapped = autoMapColumns(headers, def);
+    const autoMapped = autoMapColumns(headers, def.fields);
 
     // If an earlier tab was already mapped to this same entity, reuse those
     // exact header choices wherever this tab has a matching column name -
@@ -196,7 +196,7 @@ export default function ImportWizard() {
   /** Discards the reused mapping for the current sheet and re-runs plain header-name auto-detection instead. */
   function reapplyAutoDetect() {
     if (!currentJob || !currentDef) return;
-    setMapping(autoMapColumns(currentJob.sheet.headers, currentDef));
+    setMapping(autoMapColumns(currentJob.sheet.headers, currentDef.fields));
     setManualValues({});
     setMappingReusedFrom(null);
   }

@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useSearchParams } from 'react-router-dom';
 import { db } from '@/lib/db';
-import { Search, Warehouse } from 'lucide-react';
+import { Search, Warehouse, Layers } from 'lucide-react';
+import BulkStorageImportModal from '@/components/BulkStorageImportModal';
 
 export default function Storage() {
   const flats = useLiveQuery(() => db.flats.toArray(), []) ?? [];
@@ -12,6 +13,7 @@ export default function Storage() {
   const [query, setQuery] = useState('');
   const [buildingFilter, setBuildingFilter] = useState<number | 'all'>('all');
   const [includedOnly, setIncludedOnly] = useState(true);
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   useEffect(() => {
     const q = searchParams.get('q');
@@ -33,6 +35,12 @@ export default function Storage() {
     await db.flats.update(id, { storageIncluded: value });
   }
 
+  async function commitBulkStorageUpdate(updates: { id: number; storageIncluded: boolean }[]) {
+    await db.transaction('rw', [db.flats], async () => {
+      for (const u of updates) await db.flats.update(u.id, { storageIncluded: u.storageIncluded });
+    });
+  }
+
   const totalWithStorage = flats.filter((f) => f.storageIncluded).length;
 
   return (
@@ -52,7 +60,12 @@ export default function Storage() {
             <input type="checkbox" checked={includedOnly} onChange={(e) => setIncludedOnly(e.target.checked)} /> With storage only
           </label>
         </div>
-        <div className="text-sm text-gray-500 flex items-center gap-1.5 shrink-0"><Warehouse size={15} /> {totalWithStorage} flat{totalWithStorage === 1 ? '' : 's'} with storage</div>
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="text-sm text-gray-500 flex items-center gap-1.5"><Warehouse size={15} /> {totalWithStorage} flat{totalWithStorage === 1 ? '' : 's'} with storage</div>
+          <button onClick={() => setBulkOpen(true)} className="btn-secondary flex items-center gap-2 justify-center" disabled={flats.length === 0}>
+            <Layers size={16} /> Bulk Import
+          </button>
+        </div>
       </div>
 
       <div className="card overflow-hidden">
@@ -115,6 +128,14 @@ export default function Storage() {
 
         <div className="px-4 py-3 text-xs text-gray-400 border-t border-gray-100">Total: {filtered.length} flat{filtered.length === 1 ? '' : 's'}</div>
       </div>
+
+      <BulkStorageImportModal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        flats={flats}
+        buildings={buildings}
+        onCommit={commitBulkStorageUpdate}
+      />
     </div>
   );
 }

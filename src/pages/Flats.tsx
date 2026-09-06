@@ -12,6 +12,7 @@ import { useBulkSelection } from '@/hooks/useBulkSelection';
 import type { Flat } from '@/types';
 import { UNIT_TYPES, FLAT_LIFECYCLE_STATUSES } from '@/types';
 import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
+import { FLATS_DEF, fieldAliases } from '@/lib/import/schemas';
 
 const emptyFlat = (buildingId: number): Flat => ({
   buildingId, unitNo: '', occupancyStatus: 'vacant', lifecycleStatus: 'active',
@@ -20,11 +21,11 @@ const emptyFlat = (buildingId: number): Flat => ({
 
 type BulkFlatRow = { unitNo: string; unitType: string; bedrooms: number | ''; bathrooms: number | ''; standardRent: number | '' };
 const bulkFlatFields: BulkAddField<BulkFlatRow>[] = [
-  { key: 'unitNo', label: 'Unit No', type: 'text', required: true, placeholder: 'A-3' },
-  { key: 'unitType', label: 'Type', type: 'select', options: ['', ...UNIT_TYPES] },
-  { key: 'bedrooms', label: 'Bedrooms', type: 'number' },
-  { key: 'bathrooms', label: 'Bathrooms', type: 'number' },
-  { key: 'standardRent', label: 'Standard Rent', type: 'number' },
+  { key: 'unitNo', label: 'Unit No', type: 'text', required: true, placeholder: 'A-3', aliases: fieldAliases(FLATS_DEF, 'unitNo') },
+  { key: 'unitType', label: 'Type', type: 'select', options: ['', ...UNIT_TYPES], aliases: fieldAliases(FLATS_DEF, 'unitType') },
+  { key: 'bedrooms', label: 'Bedrooms', type: 'number', aliases: fieldAliases(FLATS_DEF, 'bedrooms') },
+  { key: 'bathrooms', label: 'Bathrooms', type: 'number', aliases: fieldAliases(FLATS_DEF, 'bathrooms') },
+  { key: 'standardRent', label: 'Standard Rent', type: 'number', aliases: fieldAliases(FLATS_DEF, 'standardRent') },
 ];
 const bulkFlatEmptyRow = (): BulkFlatRow => ({ unitNo: '', unitType: '', bedrooms: '', bathrooms: '', standardRent: '' });
 

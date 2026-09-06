@@ -29,7 +29,7 @@ const FILE_PATH = process.env.E2E_XLSX_PATH;
 
     for (const { sheet, entity } of jobs) {
       const def = IMPORT_ENTITIES[entity];
-      const mapping = autoMapColumns(sheet.headers, def);
+      const mapping = autoMapColumns(sheet.headers, def.fields);
       const hasNameParts = def.fields.some((f) => f.key === 'firstName');
       const unmappedRequired = def.fields.filter((f) => {
         if ((mapping[f.key] ?? -1) >= 0) return false;

@@ -11,6 +11,7 @@ import { useBulkSelection } from '@/hooks/useBulkSelection';
 import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
 import { validateImageFile, fileToBase64 } from '@/lib/fileValidation';
 import { EXPENSE_CATEGORIES } from '@/types';
+import { EXPENSES_DEF, fieldAliases } from '@/lib/import/schemas';
 import type { Expense } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -84,10 +85,10 @@ export default function Expenses() {
   }
 
   const BULK_FIELDS: BulkAddField<BulkRow>[] = [
-    { key: 'category', label: 'Category', type: 'select', options: [...EXPENSE_CATEGORIES] },
-    { key: 'amount', label: 'Amount', type: 'number', required: true },
-    { key: 'vendor', label: 'Vendor', type: 'text' },
-    { key: 'date', label: 'Date', type: 'date' },
+    { key: 'category', label: 'Category', type: 'select', options: [...EXPENSE_CATEGORIES], aliases: fieldAliases(EXPENSES_DEF, 'category') },
+    { key: 'amount', label: 'Amount', type: 'number', required: true, aliases: fieldAliases(EXPENSES_DEF, 'amount') },
+    { key: 'vendor', label: 'Vendor', type: 'text', aliases: fieldAliases(EXPENSES_DEF, 'vendor') },
+    { key: 'date', label: 'Date', type: 'date', aliases: fieldAliases(EXPENSES_DEF, 'date') },
   ];
 
   async function commitBulkAdd(rows: BulkRow[]) {

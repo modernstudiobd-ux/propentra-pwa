@@ -382,6 +382,11 @@ export const IMPORT_ENTITY_ORDER: ImportEntityKey[] = [
   'buildings', 'flats', 'residents', 'expenses', 'tenancies', 'ownerships', 'contacts', 'emergencyContacts', 'vehicles', 'parkingSpaces',
 ];
 
+/** Looks up the header-matching aliases already curated for an Import Wizard field, keyed by its field key. Lets a page's quick per-entity Bulk Add field reuse the same alias list as the full multi-entity import (e.g. Buildings' "name" field), instead of re-authoring a separate one, whenever the two share a field key. */
+export function fieldAliases(def: ImportEntityDef, key: string): string[] {
+  return def.fields.find((f) => f.key === key)?.aliases ?? [];
+}
+
 /** Lowercase, alphanumeric-only form used to fuzzily compare header text, entity/building/unit names, etc. */
 export function normalizeHeader(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, '');

@@ -84,9 +84,9 @@ export default function Reminders() {
   }
 
   const BULK_FIELDS: BulkAddField<BulkRow>[] = [
-    { key: 'title', label: 'Title', type: 'text', required: true, placeholder: 'e.g. Renew fire insurance' },
-    { key: 'dueDate', label: 'Due Date', type: 'date', required: true },
-    { key: 'priority', label: 'Priority', type: 'select', options: ['low', 'medium', 'high'] },
+    { key: 'title', label: 'Title', type: 'text', required: true, placeholder: 'e.g. Renew fire insurance', aliases: ['title', 'reminder', 'task', 'subject', 'description'] },
+    { key: 'dueDate', label: 'Due Date', type: 'date', required: true, aliases: ['duedate', 'date', 'reminderdate', 'deadline'] },
+    { key: 'priority', label: 'Priority', type: 'select', options: ['low', 'medium', 'high'], aliases: ['priority', 'urgency', 'severity'] },
   ];
 
   async function commitBulkAdd(rows: BulkRow[]) {

@@ -1,4 +1,14 @@
-import { normalizeHeader, type ImportEntityDef } from './schemas';
+import { normalizeHeader } from './schemas';
+
+/** Minimal shape autoMapColumns needs from a target field - satisfied by
+ * both a full ImportEntityDef field and the lighter-weight BulkAddField
+ * used by per-page Bulk Add modals, so the same matching logic serves
+ * both the multi-entity Import Wizard and quick single-entity imports. */
+export interface MappableField {
+  key: string;
+  label: string;
+  aliases?: string[];
+}
 
 export type DetectedColumnType = 'number' | 'date' | 'boolean' | 'string';
 
@@ -135,13 +145,13 @@ const MATCH_THRESHOLD = 0.55;
  * field is actually the strong, correct match for that same header.
  * Returns -1 for any field that couldn't be confidently auto-mapped.
  */
-export function autoMapColumns(headers: string[], def: ImportEntityDef): Record<string, number> {
+export function autoMapColumns(headers: string[], fields: MappableField[]): Record<string, number> {
   const normHeaders = headers.map(normalizeHeader);
   const tokenizedHeaders = headers.map(tokenize);
 
   const candidateMatches: { fieldIdx: number; headerIdx: number; score: number }[] = [];
-  def.fields.forEach((field, fieldIdx) => {
-    const candidates = [field.key, field.label, ...field.aliases];
+  fields.forEach((field, fieldIdx) => {
+    const candidates = [field.key, field.label, ...(field.aliases ?? [])];
     for (let i = 0; i < headers.length; i++) {
       if (!normHeaders[i]) continue;
       let best = 0;
@@ -160,14 +170,14 @@ export function autoMapColumns(headers: string[], def: ImportEntityDef): Record<
   const usedHeaders = new Set<number>();
   const usedFields = new Set<number>();
   const mapping: Record<string, number> = {};
-  for (const field of def.fields) mapping[field.key] = -1;
+  for (const field of fields) mapping[field.key] = -1;
 
   for (const { fieldIdx, headerIdx, score } of candidateMatches) {
     if (usedFields.has(fieldIdx) || usedHeaders.has(headerIdx)) continue;
     void score;
     usedFields.add(fieldIdx);
     usedHeaders.add(headerIdx);
-    mapping[def.fields[fieldIdx].key] = headerIdx;
+    mapping[fields[fieldIdx].key] = headerIdx;
   }
   return mapping;
 }

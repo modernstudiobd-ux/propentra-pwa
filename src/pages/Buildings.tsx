@@ -10,6 +10,7 @@ import { useBulkSelection } from '@/hooks/useBulkSelection';
 import type { Building } from '@/types';
 import { PROPERTY_TYPES, BUILDING_STATUSES } from '@/types';
 import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
+import { BUILDINGS_DEF, fieldAliases } from '@/lib/import/schemas';
 
 function nowIso() { return new Date().toISOString(); }
 const empty = (): Building => ({
@@ -19,11 +20,11 @@ const empty = (): Building => ({
 
 type BulkRow = { name: string; address: string; locality: string; propertyType: string; totalFlats: number | '' };
 const bulkFields: BulkAddField<BulkRow>[] = [
-  { key: 'name', label: 'Building Name', type: 'text', required: true, placeholder: 'Oakwood Residences' },
-  { key: 'address', label: 'Address', type: 'text', required: true, placeholder: '1200 Oakwood Avenue' },
-  { key: 'locality', label: 'City', type: 'text' },
-  { key: 'propertyType', label: 'Type', type: 'select', options: ['', ...PROPERTY_TYPES] },
-  { key: 'totalFlats', label: 'Total Flats', type: 'number' },
+  { key: 'name', label: 'Building Name', type: 'text', required: true, placeholder: 'Oakwood Residences', aliases: fieldAliases(BUILDINGS_DEF, 'name') },
+  { key: 'address', label: 'Address', type: 'text', required: true, placeholder: '1200 Oakwood Avenue', aliases: fieldAliases(BUILDINGS_DEF, 'address') },
+  { key: 'locality', label: 'City', type: 'text', aliases: fieldAliases(BUILDINGS_DEF, 'locality') },
+  { key: 'propertyType', label: 'Type', type: 'select', options: ['', ...PROPERTY_TYPES], aliases: fieldAliases(BUILDINGS_DEF, 'propertyType') },
+  { key: 'totalFlats', label: 'Total Flats', type: 'number', aliases: fieldAliases(BUILDINGS_DEF, 'totalFlats') },
 ];
 const bulkEmptyRow = (): BulkRow => ({ name: '', address: '', locality: '', propertyType: '', totalFlats: '' });
 
