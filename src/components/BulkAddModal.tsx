@@ -2,9 +2,24 @@ import { useEffect, useRef, useState } from 'react';
 import { Plus, Trash2, Upload, FileSpreadsheet, ArrowLeft } from 'lucide-react';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import BulkToolbar from '@/components/BulkToolbar';
+import { useBulkSelection } from '@/hooks/useBulkSelection';
 import { parseImportFile, type ParsedWorkbook } from '@/lib/import/parseFile';
 import { autoMapColumns } from '@/lib/import/detect';
 import { coerceImportCell } from '@/lib/import/quickImport';
+
+/** Same header/row checkbox used everywhere else in the app (Residents, Flats, Buildings, Parking list tables), just with native indeterminate support added - nothing elsewhere in the app currently needs the "some but not all" visual, but a Bulk Add grid commonly does after importing a large file and only wanting to remove a few rows. */
+function SelectAllCheckbox({ checked, indeterminate, onChange, disabled }: { checked: boolean; indeterminate: boolean; onChange: () => void; disabled?: boolean }) {
+  return (
+    <input
+      type="checkbox"
+      checked={checked}
+      disabled={disabled}
+      onChange={onChange}
+      ref={(el) => { if (el) el.indeterminate = indeterminate; }}
+    />
+  );
+}
 
 export interface BulkAddField<T> {
   key: keyof T & string;
@@ -47,6 +62,12 @@ export default function BulkAddModal<T extends Record<string, any>>({
   const [confirming, setConfirming] = useState<T[] | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Row selection for bulk-removing several draft rows at once, reusing the
+  // exact same hook/toolbar the app's record list pages already use for
+  // bulk delete - keyed by row index here since these are unsaved draft
+  // rows rather than existing records with a real id.
+  const selection = useBulkSelection(rows.map((_, i) => ({ id: i })));
+
   // "Import from File" sub-flow, entirely contained within this modal.
   // 'closed' = normal manual grid; 'sheet' = choose which tab of a
   // multi-sheet workbook to use; 'map' = match spreadsheet columns to
@@ -64,6 +85,7 @@ export default function BulkAddModal<T extends Record<string, any>>({
       setRows(Array.from({ length: startRows }, () => makeEmptyRow()));
       setErrors({});
       setConfirming(null);
+      selection.clear();
       resetImport();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,6 +152,7 @@ export default function BulkAddModal<T extends Record<string, any>>({
     const keptManualRows = rows.filter((r) => !isRowBlank(r));
     const nextRows = [...keptManualRows, ...imported];
     setRows(nextRows);
+    selection.clear(); // row indices are about to mean something different
     // Surface any missing-required-field rows immediately, before the person
     // even clicks "Review & Add", since an import can bring in far more rows
     // than anyone would proofread column-by-column on their own.
@@ -158,7 +181,14 @@ export default function BulkAddModal<T extends Record<string, any>>({
     setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   }
   function addRow() { setRows((prev) => [...prev, makeEmptyRow()]); }
-  function removeRow(idx: number) { setRows((prev) => prev.filter((_, i) => i !== idx)); }
+  function removeRow(idx: number) {
+    setRows((prev) => prev.filter((_, i) => i !== idx));
+    selection.clear(); // remaining rows shift index, so a stale selection could now point at the wrong row
+  }
+  function removeSelectedRows() {
+    setRows((prev) => prev.filter((_, i) => !selection.isSelected(i)));
+    selection.clear();
+  }
 
   function reviewClick() {
     const nextErrors = computeErrors(rows);
@@ -254,10 +284,23 @@ export default function BulkAddModal<T extends Record<string, any>>({
             <p className="text-xs text-gray-400">Fill in as many rows as you need, or import them from a spreadsheet, then review before adding. Blank rows are ignored.</p>
             {globalError && <div className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{globalError}</div>}
             {importError && <div className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{importError}</div>}
+
+            <BulkToolbar count={selection.count} onDelete={removeSelectedRows} onClear={selection.clear} deleteLabel="Remove Selected" />
+
+            <div className="flex items-center gap-2 px-1">
+              <label className="flex items-center gap-2 text-xs text-gray-500">
+                <SelectAllCheckbox checked={selection.allSelected} indeterminate={selection.count > 0 && !selection.allSelected} onChange={selection.toggleAll} disabled={rows.length === 0} />
+                Select all {rows.length} row{rows.length === 1 ? '' : 's'}
+              </label>
+            </div>
+
             <div className="overflow-x-auto -mx-1 px-1">
               <table className="w-full text-sm min-w-[600px]">
                 <thead>
                   <tr>
+                    <th className="w-6">
+                      <SelectAllCheckbox checked={selection.allSelected} indeterminate={selection.count > 0 && !selection.allSelected} onChange={selection.toggleAll} disabled={rows.length === 0} />
+                    </th>
                     {fields.map((f) => (
                       <th key={f.key} className="text-left text-xs font-medium text-gray-500 pb-2 pr-2 whitespace-nowrap">
                         {f.label}{f.required ? ' *' : ''}
@@ -269,6 +312,9 @@ export default function BulkAddModal<T extends Record<string, any>>({
                 <tbody>
                   {rows.map((row, i) => (
                     <tr key={i} className="align-top">
+                      <td className="pb-2 pt-2">
+                        <input type="checkbox" checked={selection.isSelected(i)} onChange={() => selection.toggle(i)} />
+                      </td>
                       {fields.map((f) => (
                         <td key={f.key} className="pr-2 pb-2">
                           {f.type === 'select' ? (
