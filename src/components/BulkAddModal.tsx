@@ -287,19 +287,23 @@ export default function BulkAddModal<T extends Record<string, any>>({
 
             <BulkToolbar count={selection.count} onDelete={removeSelectedRows} onClear={selection.clear} deleteLabel="Remove Selected" />
 
-            <div className="flex items-center gap-2 px-1">
-              <label className="flex items-center gap-2 text-xs text-gray-500">
-                <SelectAllCheckbox checked={selection.allSelected} indeterminate={selection.count > 0 && !selection.allSelected} onChange={selection.toggleAll} disabled={rows.length === 0} />
-                Select all {rows.length} row{rows.length === 1 ? '' : 's'}
-              </label>
-            </div>
+            {rows.length > 0 && (
+              <div className="flex items-center gap-2 px-1">
+                <label className="flex items-center gap-2 text-xs text-gray-500">
+                  <SelectAllCheckbox checked={selection.allSelected} indeterminate={selection.count > 0 && !selection.allSelected} onChange={selection.toggleAll} />
+                  Select all {rows.length} row{rows.length === 1 ? '' : 's'}
+                </label>
+              </div>
+            )}
 
             <div className="overflow-x-auto -mx-1 px-1">
               <table className="w-full text-sm min-w-[600px]">
                 <thead>
                   <tr>
                     <th className="w-6">
-                      <SelectAllCheckbox checked={selection.allSelected} indeterminate={selection.count > 0 && !selection.allSelected} onChange={selection.toggleAll} disabled={rows.length === 0} />
+                      {rows.length > 0 && (
+                        <SelectAllCheckbox checked={selection.allSelected} indeterminate={selection.count > 0 && !selection.allSelected} onChange={selection.toggleAll} />
+                      )}
                     </th>
                     {fields.map((f) => (
                       <th key={f.key} className="text-left text-xs font-medium text-gray-500 pb-2 pr-2 whitespace-nowrap">

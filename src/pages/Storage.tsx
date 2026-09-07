@@ -62,7 +62,7 @@ export default function Storage() {
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <div className="text-sm text-gray-500 flex items-center gap-1.5"><Warehouse size={15} /> {totalWithStorage} flat{totalWithStorage === 1 ? '' : 's'} with storage</div>
-          <button onClick={() => setBulkOpen(true)} className="btn-secondary flex items-center gap-2 justify-center" disabled={flats.length === 0}>
+          <button onClick={() => setBulkOpen(true)} className="btn-secondary flex items-center gap-2 justify-center">
             <Layers size={16} /> Bulk Import
           </button>
         </div>

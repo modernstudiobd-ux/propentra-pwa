@@ -98,7 +98,7 @@ export default function Buildings() {
           <table className="w-full min-w-[700px]">
             <thead className="bg-gray-50">
               <tr>
-                <th className="table-th w-8"><input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} /></th>
+                <th className="table-th w-8">{filtered.length > 0 && <input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} />}</th>
                 <th className="table-th">ID</th>
                 <th className="table-th">Building Name</th>
                 <th className="table-th">Address</th>

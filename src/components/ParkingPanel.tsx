@@ -87,7 +87,7 @@ export default function ParkingPanel({
           <label className="flex items-center gap-2 text-xs text-gray-600 whitespace-nowrap px-1">
             <input type="checkbox" checked={vacantOnly} onChange={(e) => setVacantOnly(e.target.checked)} /> Vacant only
           </label>
-          <button onClick={() => setBulkOpen(true)} className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5" disabled={buildings.length === 0}>
+          <button onClick={() => setBulkOpen(true)} className="btn-secondary !py-1.5 !px-3 text-xs flex items-center gap-1.5">
             <Layers size={14} /> Bulk Add
           </button>
           <button onClick={openAdd} className="btn-primary !py-1.5 !px-3 text-xs flex items-center gap-1.5" disabled={buildings.length === 0}>
@@ -96,10 +96,12 @@ export default function ParkingPanel({
         </div>
       </div>
       <div className="px-4 pt-3 space-y-2">
-        <label className="flex items-center gap-2 text-sm text-gray-600">
-          <input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} disabled={filtered.length === 0} />
-          Select all {filtered.length} space{filtered.length === 1 ? '' : 's'}
-        </label>
+        {filtered.length > 0 && (
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} />
+            Select all {filtered.length} space{filtered.length === 1 ? '' : 's'}
+          </label>
+        )}
         <BulkToolbar count={bulk.count} onDelete={() => setConfirmBulkDelete(true)} onClear={bulk.clear} />
       </div>
       <div className="divide-y divide-gray-100">

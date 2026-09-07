@@ -109,7 +109,7 @@ export default function Flats() {
           </label>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setBulkOpen(true)} className="btn-secondary flex items-center gap-2 justify-center" disabled={buildings.length === 0}>
+          <button onClick={() => setBulkOpen(true)} className="btn-secondary flex items-center gap-2 justify-center">
             <Layers size={16} /> Bulk Add
           </button>
           <button onClick={openAdd} className="btn-primary flex items-center gap-2 justify-center" disabled={buildings.length === 0}>
@@ -120,19 +120,21 @@ export default function Flats() {
 
       <BulkToolbar count={bulk.count} onDelete={() => setConfirmBulkDelete(true)} onClear={bulk.clear} />
 
-      <div className="flex items-center gap-2 px-1">
-        <label className="flex items-center gap-2 text-sm text-gray-600">
-          <input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} disabled={filtered.length === 0} />
-          Select all {filtered.length} flat{filtered.length === 1 ? '' : 's'}
-        </label>
-      </div>
+      {filtered.length > 0 && (
+        <div className="flex items-center gap-2 px-1">
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} />
+            Select all {filtered.length} flat{filtered.length === 1 ? '' : 's'}
+          </label>
+        </div>
+      )}
 
       <div className="card overflow-hidden">
         <div className="hidden sm:block overflow-x-auto">
           <table className="w-full min-w-[700px]">
             <thead className="bg-gray-50">
               <tr>
-                <th className="table-th w-8"><input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} /></th>
+                <th className="table-th w-8">{filtered.length > 0 && <input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} />}</th>
                 <th className="table-th">ID</th>
                 <th className="table-th">Unit No</th>
                 <th className="table-th">Building</th>

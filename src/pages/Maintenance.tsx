@@ -173,7 +173,7 @@ export default function Maintenance() {
           </select>
         </div>
         <div className="flex gap-2 shrink-0">
-          <button onClick={() => setBulkOpen(true)} className="btn-secondary flex items-center gap-2 justify-center" disabled={buildings.length === 0}>
+          <button onClick={() => setBulkOpen(true)} className="btn-secondary flex items-center gap-2 justify-center">
             <Layers size={16} /> Bulk Add
           </button>
           <button onClick={openAdd} className="btn-primary flex items-center gap-2 justify-center" disabled={buildings.length === 0}>

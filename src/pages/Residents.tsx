@@ -458,7 +458,6 @@ export default function Residents() {
             <button
               onClick={() => setBulkOpen(true)}
               className="btn-secondary flex items-center gap-2 justify-center"
-              disabled={flats.length === 0}
             >
               <Layers size={16} /> Bulk Add
             </button>
@@ -479,12 +478,14 @@ export default function Residents() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 px-1">
-        <label className="flex items-center gap-2 text-sm text-gray-600">
-          <input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} disabled={filtered.length === 0} />
-          Select all {filtered.length} resident{filtered.length === 1 ? '' : 's'}
-        </label>
-      </div>
+      {filtered.length > 0 && (
+        <div className="flex items-center gap-2 px-1">
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input type="checkbox" checked={bulk.allSelected} onChange={bulk.toggleAll} />
+            Select all {filtered.length} resident{filtered.length === 1 ? '' : 's'}
+          </label>
+        </div>
+      )}
 
       <BulkToolbar count={bulk.count} onDelete={() => setConfirmBulkDelete(true)} onClear={bulk.clear} deleteLabel="Delete Selected (Permanent)" />
 
