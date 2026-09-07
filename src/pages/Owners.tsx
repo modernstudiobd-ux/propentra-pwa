@@ -9,17 +9,18 @@ import BulkAddModal, { type BulkAddField } from '@/components/BulkAddModal';
 import PersonDetailModal from '@/components/PersonDetailModal';
 import { dateLabel } from '@/lib/format';
 import { logAudit } from '@/lib/audit';
-import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
+import { nextDisplayId, reserveDisplayId } from '@/lib/ids';
 import { residentIsResident, residentIsOwner } from '@/lib/roles';
 import { validateOwnershipPct } from '@/lib/ownership';
 import { OWNERSHIP_TYPES, OWNERSHIP_STATUSES } from '@/types';
 import { RESIDENTS_DEF, OWNERSHIPS_DEF, fieldAliases } from '@/lib/import/schemas';
+import { matchPerson } from '@/lib/import/personMatch';
 import type { Resident, Ownership } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 
 interface BulkOwnerRow {
-  firstName: string; lastName: string; mobile: string; email: string;
+  personId: string; firstName: string; lastName: string; mobile: string; email: string;
   alsoResident: boolean; flatId: string; ownershipPct: number | ''; purchaseDate: string; ownershipType: string;
 }
 
@@ -267,6 +268,7 @@ export default function Owners() {
   }
 
   const BULK_FIELDS: BulkAddField<BulkOwnerRow>[] = [
+    { key: 'personId', label: 'Person ID', type: 'text', placeholder: 'optional', aliases: fieldAliases(RESIDENTS_DEF, 'externalId') },
     { key: 'firstName', label: 'First Name', type: 'text', required: true, placeholder: 'Jane', aliases: fieldAliases(RESIDENTS_DEF, 'firstName') },
     { key: 'lastName', label: 'Last Name', type: 'text', placeholder: 'Doe', aliases: fieldAliases(RESIDENTS_DEF, 'lastName') },
     { key: 'mobile', label: 'Mobile', type: 'text', aliases: fieldAliases(RESIDENTS_DEF, 'mobile') },
@@ -278,43 +280,107 @@ export default function Owners() {
     { key: 'alsoResident', label: 'Also Resident', type: 'checkbox', aliases: fieldAliases(RESIDENTS_DEF, 'isResident') },
   ];
   const bulkOwnerEmptyRow = (): BulkOwnerRow => ({
-    firstName: '', lastName: '', mobile: '', email: '', alsoResident: false,
+    personId: '', firstName: '', lastName: '', mobile: '', email: '', alsoResident: false,
     flatId: String(flats[0]?.id ?? ''), ownershipPct: 100, purchaseDate: todayISO(), ownershipType: 'Sole',
   });
 
-  // Each row creates one Resident (owner, optionally also resident) plus
-  // its own Ownership record for the chosen flat - mirroring what the
-  // single Add Owner form does, just for many rows at once.
+  // Person matching for the Bulk Add preview grid and the commit step below
+  // share this exact function, so what's shown before "Review & Add" is
+  // guaranteed to match what actually happens on save. Matches across ALL
+  // residents (not just existing owners) - the same person might already
+  // be on file as a Tenant, for instance.
+  function matchBulkOwnerRow(r: BulkOwnerRow) {
+    const flat = flats.find((f) => String(f.id) === r.flatId);
+    return matchPerson({
+      personId: r.personId, mobile: r.mobile, email: r.email,
+      buildingId: flat?.buildingId, flatId: flat?.id,
+      name: [r.firstName, r.lastName].filter((s) => s.trim()).join(' ').trim(),
+    }, residents);
+  }
+
+  function bulkOwnerRowNote(r: BulkOwnerRow): { text: string; tone: 'neutral' | 'warn' | 'good' } | null {
+    const m = matchBulkOwnerRow(r);
+    if (m.ambiguous) return { text: 'Multiple matches - will import as new', tone: 'warn' };
+    if (m.residentId !== undefined) {
+      const existing = residents.find((x) => x.id === m.residentId);
+      const alreadyOwns = ownerships.some((o) => o.residentId === m.residentId && String(o.flatId) === r.flatId);
+      return { text: `Linked · existing ${existing?.displayId ?? '#' + m.residentId}${alreadyOwns ? ' (updates ownership)' : ''}`, tone: 'good' };
+    }
+    if (m.personIdInvalid) return { text: `Person ID "${r.personId.trim()}" not found - will create new`, tone: 'warn' };
+    return { text: 'New record', tone: 'neutral' };
+  }
+
+  // Each row links to an existing person when one matches (Person ID first,
+  // then the same fallback fields the full Import Wizard uses - see
+  // matchPerson) instead of creating a duplicate, and reuses that person's
+  // existing Ownership record for this flat if there already is one, rather
+  // than adding a second. Only a row with no match at all creates a new
+  // Resident (owner, optionally also resident) plus a new Ownership record -
+  // mirroring what the single Add Owner form does, just for many rows at once.
   async function commitBulkAdd(rows: BulkOwnerRow[]) {
     const validRows = rows.filter((r) => flats.some((f) => String(f.id) === r.flatId));
     if (validRows.length === 0) return;
-    const residentIds = await nextDisplayIds('residents', validRows.length);
-    const ownershipIds = await nextDisplayIds('ownerships', validRows.length);
-    await db.transaction('rw', [db.residents, db.ownerships, db.auditLog], async () => {
-      for (let i = 0; i < validRows.length; i++) {
-        const r = validRows[i];
+    await db.transaction('rw', [db.residents, db.ownerships, db.auditLog, db.sequences], async () => {
+      for (const r of validRows) {
         const flat = flats.find((f) => String(f.id) === r.flatId)!;
         const name = [r.firstName, r.lastName].filter((s) => s.trim()).join(' ').trim();
         const pct = r.ownershipPct === '' ? 100 : Number(r.ownershipPct);
-        const residentId = (await db.residents.add({
-          name, firstName: r.firstName.trim(), lastName: r.lastName.trim(), mobile: r.mobile.trim(), email: r.email.trim(),
-          flatId: flat.id!, buildingId: flat.buildingId, unitLabel: flat.unitNo,
-          type: r.alsoResident ? 'Tenant' : 'Owner', isOwner: true, isResident: r.alsoResident,
-          status: 'current', moveInDate: r.alsoResident ? todayISO() : undefined, isBillingContact: false,
-          displayId: residentIds[i],
-        } as Resident)) as number;
+        const match = matchBulkOwnerRow(r);
 
-        await db.ownerships.add({
-          residentId, flatId: flat.id!, buildingId: flat.buildingId, status: 'active',
-          ownershipPct: pct, purchaseDate: r.purchaseDate || todayISO(), ownershipType: r.ownershipType || 'Sole',
-          displayId: ownershipIds[i],
-        });
+        let residentId: number;
+        if (match.residentId !== undefined) {
+          const existing = residents.find((x) => x.id === match.residentId);
+          if (!existing) continue;
+          residentId = existing.id!;
+          const patch: Partial<Resident> = {
+            isOwner: true,
+            isResident: (existing.isResident ?? existing.type !== 'Owner') || r.alsoResident,
+          };
+          if (r.firstName.trim() || r.lastName.trim()) { patch.name = name || existing.name; patch.firstName = r.firstName.trim() || existing.firstName; patch.lastName = r.lastName.trim() || existing.lastName; }
+          if (r.mobile.trim()) patch.mobile = r.mobile.trim();
+          if (r.email.trim()) patch.email = r.email.trim();
+          patch.type = patch.isResident && !patch.isOwner ? 'Tenant' : existing.type;
+          await db.residents.update(existing.id!, patch);
+          await logAudit({
+            action: 'resident_updated', entityType: 'resident', entityId: existing.id!,
+            buildingId: existing.buildingId, flatId: existing.flatId, residentId: existing.id!,
+            summary: `Linked existing owner ${existing.name} via bulk import (matched by ${match.matchedBy})`,
+          });
+        } else {
+          const personId = r.personId.trim();
+          let displayId: string;
+          if (personId) { await reserveDisplayId('residents', personId); displayId = personId; }
+          else displayId = await nextDisplayId('residents');
 
-        await logAudit({
-          action: 'resident_created', entityType: 'resident', entityId: residentId,
-          buildingId: flat.buildingId, flatId: flat.id, residentId,
-          summary: `Added owner ${name}${r.alsoResident ? ' (also resident)' : ''} (bulk import)`,
-        });
+          residentId = (await db.residents.add({
+            name, firstName: r.firstName.trim(), lastName: r.lastName.trim(), mobile: r.mobile.trim(), email: r.email.trim(),
+            flatId: flat.id!, buildingId: flat.buildingId, unitLabel: flat.unitNo,
+            type: r.alsoResident ? 'Tenant' : 'Owner', isOwner: true, isResident: r.alsoResident,
+            status: 'current', moveInDate: r.alsoResident ? todayISO() : undefined, isBillingContact: false,
+            displayId,
+          } as Resident)) as number;
+          await logAudit({
+            action: 'resident_created', entityType: 'resident', entityId: residentId,
+            buildingId: flat.buildingId, flatId: flat.id, residentId,
+            summary: `Added owner ${name}${r.alsoResident ? ' (also resident)' : ''} (bulk import)`,
+          });
+        }
+
+        // Reuse an existing Ownership of this same flat rather than adding
+        // a duplicate one - update its terms instead.
+        const existingOwnership = ownerships.find((o) => o.residentId === residentId && o.flatId === flat.id);
+        if (existingOwnership?.id !== undefined) {
+          await db.ownerships.update(existingOwnership.id, {
+            status: 'active', ownershipPct: pct, purchaseDate: r.purchaseDate || existingOwnership.purchaseDate, ownershipType: r.ownershipType || existingOwnership.ownershipType,
+          });
+        } else {
+          const ownershipDisplayId = await nextDisplayId('ownerships');
+          await db.ownerships.add({
+            residentId, flatId: flat.id!, buildingId: flat.buildingId, status: 'active',
+            ownershipPct: pct, purchaseDate: r.purchaseDate || todayISO(), ownershipType: r.ownershipType || 'Sole',
+            displayId: ownershipDisplayId,
+          });
+        }
       }
     });
   }
@@ -490,6 +556,7 @@ export default function Owners() {
         fields={BULK_FIELDS} makeEmptyRow={bulkOwnerEmptyRow}
         isRowBlank={(r) => !r.firstName.trim() && !r.lastName.trim()}
         onCommit={commitBulkAdd}
+        rowNote={bulkOwnerRowNote}
       />
 
       <ConfirmDialog

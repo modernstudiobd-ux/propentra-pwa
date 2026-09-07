@@ -12,10 +12,11 @@ import { useBulkSelection } from '@/hooks/useBulkSelection';
 import { dateLabel } from '@/lib/format';
 import { validateImageFileContent, maskIdNumber } from '@/lib/fileValidation';
 import { logAudit } from '@/lib/audit';
-import { nextDisplayId, nextDisplayIds } from '@/lib/ids';
+import { nextDisplayId, reserveDisplayId } from '@/lib/ids';
 import ResidentExtras from '@/components/residents/ResidentExtras';
 import { residentIsResident, residentIsOwner } from '@/lib/roles';
 import { RESIDENTS_DEF, fieldAliases } from '@/lib/import/schemas';
+import { matchPerson } from '@/lib/import/personMatch';
 import type { Resident, ResidentType, ResidentStatus } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -50,7 +51,7 @@ function diffSummary(before: Resident, after: Resident): string {
   return `Changed: ${changed.map((f) => f.label).join(', ')}`;
 }
 
-interface BulkResidentRow { firstName: string; lastName: string; mobile: string; email: string; type: ResidentType; flatId: string }
+interface BulkResidentRow { personId: string; firstName: string; lastName: string; mobile: string; email: string; type: ResidentType; flatId: string }
 
 export default function Residents() {
   const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
@@ -329,6 +330,7 @@ export default function Residents() {
   }
 
   const BULK_FIELDS: BulkAddField<BulkResidentRow>[] = [
+    { key: 'personId', label: 'Person ID', type: 'text', placeholder: 'optional', aliases: fieldAliases(RESIDENTS_DEF, 'externalId') },
     { key: 'firstName', label: 'First Name', type: 'text', required: true, placeholder: 'Jane', aliases: fieldAliases(RESIDENTS_DEF, 'firstName') },
     { key: 'lastName', label: 'Last Name', type: 'text', placeholder: 'Doe', aliases: fieldAliases(RESIDENTS_DEF, 'lastName') },
     { key: 'mobile', label: 'Mobile', type: 'text', aliases: fieldAliases(RESIDENTS_DEF, 'mobile') },
@@ -337,24 +339,85 @@ export default function Residents() {
     { key: 'flatId', label: 'Flat', type: 'select', options: flats.map((f) => ({ value: String(f.id), label: `${buildingName(f.buildingId)} · ${f.unitNo}` })), required: true, aliases: fieldAliases(RESIDENTS_DEF, 'flatRef') },
   ];
 
-  // Bulk Add lives on the Residents page, so every row is always a
-  // Resident. "Owner-Occupied" additionally marks isOwner - it never
-  // creates an offsite-owner-only record (those belong on the Owners page,
-  // since they must NOT show up here or count as a resident).
+  // Person matching for the Bulk Add preview grid and the commit step below
+  // share this exact function, so what's shown before "Review & Add" is
+  // guaranteed to match what actually happens on save.
+  function matchBulkResidentRow(r: BulkResidentRow) {
+    const flat = flats.find((f) => f.id === Number(r.flatId));
+    return matchPerson({
+      personId: r.personId, mobile: r.mobile, email: r.email,
+      buildingId: flat?.buildingId, flatId: flat?.id,
+      name: composeName(r.firstName, r.lastName),
+    }, residents);
+  }
+
+  function bulkResidentRowNote(r: BulkResidentRow): { text: string; tone: 'neutral' | 'warn' | 'good' } | null {
+    const m = matchBulkResidentRow(r);
+    if (m.ambiguous) return { text: 'Multiple matches - will import as new', tone: 'warn' };
+    if (m.residentId !== undefined) {
+      const existing = residents.find((x) => x.id === m.residentId);
+      return { text: `Linked · existing ${existing?.displayId ?? '#' + m.residentId}`, tone: 'good' };
+    }
+    if (m.personIdInvalid) return { text: `Person ID "${r.personId.trim()}" not found - will create new`, tone: 'warn' };
+    return { text: 'New record', tone: 'neutral' };
+  }
+
+  // Bulk Add lives on the Residents page, so every row always ends up
+  // Resident (isResident=true). If the row matches an existing person
+  // (Person ID first, then the same fallback fields the full Import
+  // Wizard uses - see matchPerson), that person is linked/updated instead
+  // of creating a duplicate; only rows with no match at all become new
+  // Resident records. "Owner-Occupied" additionally marks isOwner - it
+  // never creates an offsite-owner-only record (those belong on the
+  // Owners page, since they must NOT show up here or count as a resident).
   async function commitBulkAdd(rows: BulkResidentRow[]) {
-    const ids = await nextDisplayIds('residents', rows.length);
-    await db.transaction('rw', [db.residents, db.auditLog], async () => {
-      for (let i = 0; i < rows.length; i++) {
-        const r = rows[i];
+    await db.transaction('rw', [db.residents, db.auditLog, db.sequences], async () => {
+      for (const r of rows) {
         const flat = flats.find((f) => f.id === Number(r.flatId));
         if (!flat) continue;
         const name = composeName(r.firstName, r.lastName);
+        const match = matchBulkResidentRow(r);
+
+        if (match.residentId !== undefined) {
+          // Link to the existing person - merge in only the non-blank
+          // fields from the sheet (never blank out data already on file),
+          // and OR-merge role flags rather than overwriting them, exactly
+          // like a second sheet in the full Import Wizard would.
+          const existing = residents.find((x) => x.id === match.residentId);
+          if (!existing) continue;
+          const patch: Partial<Resident> = {
+            isResident: true,
+            isOwner: (existing.isOwner ?? existing.type === 'Owner') || r.type === 'Owner',
+          };
+          if (r.firstName.trim() || r.lastName.trim()) { patch.name = name || existing.name; patch.firstName = r.firstName.trim() || existing.firstName; patch.lastName = r.lastName.trim() || existing.lastName; }
+          if (r.mobile.trim()) patch.mobile = r.mobile.trim();
+          if (r.email.trim()) patch.email = r.email.trim();
+          if (!existing.flatId) { patch.flatId = flat.id!; patch.buildingId = flat.buildingId; patch.unitLabel = flat.unitNo; }
+          patch.type = patch.isOwner ? 'Owner' : existing.type;
+          await db.residents.update(existing.id!, patch);
+          await logAudit({
+            action: 'resident_updated', entityType: 'resident', entityId: existing.id!,
+            buildingId: existing.buildingId, flatId: existing.flatId, residentId: existing.id!,
+            summary: `Linked existing resident ${existing.name} via bulk import (matched by ${match.matchedBy})`,
+          });
+          continue;
+        }
+
+        // No match - create a new resident. A Person ID that didn't match
+        // anything becomes this new record's display ID (reserving it so
+        // future auto-generated IDs never collide), exactly like the full
+        // Import Wizard does for an unrecognized source ID.
+        const personId = r.personId.trim();
+        let displayId: string;
+        if (personId) { await reserveDisplayId('residents', personId); displayId = personId; }
+        else displayId = await nextDisplayId('residents');
+
         const newId = await db.residents.add({
           ...emptyForm(flats), name, firstName: r.firstName.trim(), lastName: r.lastName.trim(),
           mobile: r.mobile.trim(), email: r.email.trim(), type: r.type,
           isResident: true, isOwner: r.type === 'Owner',
           flatId: flat.id!, buildingId: flat.buildingId, unitLabel: flat.unitNo,
-          displayId: ids[i],
+          displayId,
         });
         await logAudit({
           action: 'resident_created', entityType: 'resident', entityId: newId as number,
@@ -600,9 +663,10 @@ export default function Residents() {
         title="Bulk Add Residents"
         entityLabel="resident"
         fields={BULK_FIELDS}
-        makeEmptyRow={() => ({ firstName: '', lastName: '', mobile: '', email: '', type: 'Tenant', flatId: String(flats[0]?.id ?? '') })}
+        makeEmptyRow={() => ({ personId: '', firstName: '', lastName: '', mobile: '', email: '', type: 'Tenant', flatId: String(flats[0]?.id ?? '') })}
         isRowBlank={(r) => !r.firstName.trim() && !r.lastName.trim()}
         onCommit={commitBulkAdd}
+        rowNote={bulkResidentRowNote}
       />
 
       <ConfirmDialog

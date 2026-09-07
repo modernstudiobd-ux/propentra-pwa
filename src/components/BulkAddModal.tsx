@@ -30,6 +30,8 @@ interface BulkAddModalProps<T> {
   validateRow?: (row: T) => string | null;
   onCommit: (rows: T[]) => Promise<void>;
   startRows?: number;
+  /** Optional, opt-in per-row status badge shown next to the delete button (e.g. Residents/Owners Bulk Import surfacing "Linked to existing #P-00005" or "New" once a row has enough info to check for a match). Return null to show nothing for that row. Purely informational - doesn't gate anything in this generic modal. */
+  rowNote?: (row: T) => { text: string; tone: 'neutral' | 'warn' | 'good' } | null;
 }
 
 /**
@@ -38,7 +40,7 @@ interface BulkAddModalProps<T> {
  * before anything is written to the database.
  */
 export default function BulkAddModal<T extends Record<string, any>>({
-  open, onClose, title, entityLabel, fields, makeEmptyRow, isRowBlank, validateRow, onCommit, startRows = 3,
+  open, onClose, title, entityLabel, fields, makeEmptyRow, isRowBlank, validateRow, onCommit, startRows = 3, rowNote,
 }: BulkAddModalProps<T>) {
   const [rows, setRows] = useState<T[]>([]);
   const [errors, setErrors] = useState<Record<number, string>>({});
@@ -295,7 +297,15 @@ export default function BulkAddModal<T extends Record<string, any>>({
                         </td>
                       ))}
                       <td className="pb-2">
-                        <button onClick={() => removeRow(i)} className="icon-btn text-red-400" title="Remove row"><Trash2 size={14} /></button>
+                        <div className="flex flex-col items-end gap-1">
+                          <button onClick={() => removeRow(i)} className="icon-btn text-red-400" title="Remove row"><Trash2 size={14} /></button>
+                          {rowNote && !isRowBlank(row) && (() => {
+                            const note = rowNote(row);
+                            if (!note) return null;
+                            const toneClass = note.tone === 'good' ? 'bg-green-50 text-green-600' : note.tone === 'warn' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500';
+                            return <span className={`text-[10px] px-1.5 py-0.5 rounded-full whitespace-nowrap ${toneClass}`}>{note.text}</span>;
+                          })()}
+                        </div>
                       </td>
                     </tr>
                   ))}
