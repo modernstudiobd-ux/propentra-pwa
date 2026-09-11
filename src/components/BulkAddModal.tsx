@@ -7,6 +7,7 @@ import { useBulkSelection } from '@/hooks/useBulkSelection';
 import { parseImportFile, type ParsedWorkbook } from '@/lib/import/parseFile';
 import { autoMapColumns } from '@/lib/import/detect';
 import { coerceImportCell } from '@/lib/import/quickImport';
+import { guessEntityFromSheetName, type ImportEntityKey } from '@/lib/import/schemas';
 
 /** Same header/row checkbox used everywhere else in the app (Residents, Flats, Buildings, Parking list tables), just with native indeterminate support added - nothing elsewhere in the app currently needs the "some but not all" visual, but a Bulk Add grid commonly does after importing a large file and only wanting to remove a few rows. */
 function SelectAllCheckbox({ checked, indeterminate, onChange, disabled }: { checked: boolean; indeterminate: boolean; onChange: () => void; disabled?: boolean }) {
@@ -47,6 +48,8 @@ interface BulkAddModalProps<T> {
   startRows?: number;
   /** Optional, opt-in per-row status badge shown next to the delete button (e.g. Residents/Owners Bulk Import surfacing "Linked to existing #P-00005" or "New" once a row has enough info to check for a match). Return null to show nothing for that row. Purely informational - doesn't gate anything in this generic modal. */
   rowNote?: (row: T) => { text: string; tone: 'neutral' | 'warn' | 'good' } | null;
+  /** This entity's key(s) in the full Import Wizard's entity set (e.g. "residents", "tenancies", "ownerships") - when set, an uploaded multi-sheet workbook with exactly one sheet whose tab name confidently matches one of these (via the same guessEntityFromSheetName used by the full Import Wizard) is auto-selected instead of asking the person to pick. Pass an array when a single Bulk Add flow covers more than one Import Wizard entity (e.g. Residents' Bulk Add also creates each person's Tenancy, so both a "Residents" and a "Tenancies" tab should auto-select it). Omit for entities the full wizard doesn't know about (e.g. Maintenance, Reminders); the manual sheet-picker behaves exactly as before. */
+  entityKey?: ImportEntityKey | ImportEntityKey[];
 }
 
 /**
@@ -55,7 +58,7 @@ interface BulkAddModalProps<T> {
  * before anything is written to the database.
  */
 export default function BulkAddModal<T extends Record<string, any>>({
-  open, onClose, title, entityLabel, fields, makeEmptyRow, isRowBlank, validateRow, onCommit, startRows = 3, rowNote,
+  open, onClose, title, entityLabel, fields, makeEmptyRow, isRowBlank, validateRow, onCommit, startRows = 3, rowNote, entityKey,
 }: BulkAddModalProps<T>) {
   const [rows, setRows] = useState<T[]>([]);
   const [errors, setErrors] = useState<Record<number, string>>({});
@@ -119,8 +122,21 @@ export default function BulkAddModal<T extends Record<string, any>>({
       if (usable.length === 0) throw new Error('No data rows found in that file.');
       setWorkbook(wb);
       if (wb.sheets.length > 1) {
-        setSheetIdx(wb.sheets.findIndex((s) => s.rows.length > 0));
-        setImportStage('sheet');
+        // Same sheet-name guessing the full Import Wizard uses (case-
+        // insensitive, whitespace/punctuation-tolerant - see
+        // guessEntityFromSheetName). Only auto-select when exactly one
+        // sheet confidently matches this entity; two candidate sheets (or
+        // none) fall back to letting the person choose, same as before.
+        const entityKeys = entityKey ? (Array.isArray(entityKey) ? entityKey : [entityKey]) : [];
+        const confidentMatches = entityKeys.length > 0
+          ? usable.filter((s) => { const g = guessEntityFromSheetName(s.name); return g !== null && entityKeys.includes(g); })
+          : [];
+        if (confidentMatches.length === 1) {
+          startMapping(wb, wb.sheets.indexOf(confidentMatches[0]));
+        } else {
+          setSheetIdx(wb.sheets.findIndex((s) => s.rows.length > 0));
+          setImportStage('sheet');
+        }
       } else {
         startMapping(wb, 0);
       }

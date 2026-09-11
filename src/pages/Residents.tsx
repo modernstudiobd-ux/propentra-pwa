@@ -15,8 +15,9 @@ import { logAudit } from '@/lib/audit';
 import { nextDisplayId, reserveDisplayId } from '@/lib/ids';
 import ResidentExtras from '@/components/residents/ResidentExtras';
 import { residentIsResident, residentIsOwner } from '@/lib/roles';
-import { RESIDENTS_DEF, fieldAliases } from '@/lib/import/schemas';
+import { RESIDENTS_DEF, TENANCIES_DEF, fieldAliases } from '@/lib/import/schemas';
 import { matchPerson } from '@/lib/import/personMatch';
+import { suggestRentForFlat, getActiveTenancyForResident } from '@/lib/tenancy';
 import type { Resident, ResidentType, ResidentStatus } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
@@ -51,7 +52,7 @@ function diffSummary(before: Resident, after: Resident): string {
   return `Changed: ${changed.map((f) => f.label).join(', ')}`;
 }
 
-interface BulkResidentRow { personId: string; firstName: string; lastName: string; mobile: string; email: string; type: ResidentType; flatId: string }
+interface BulkResidentRow { personId: string; firstName: string; lastName: string; mobile: string; email: string; type: ResidentType; flatId: string; leaseStart: string; monthlyRent: number | '' }
 
 export default function Residents() {
   const residents = useLiveQuery(() => db.residents.toArray(), []) ?? [];
@@ -337,18 +338,26 @@ export default function Residents() {
     { key: 'email', label: 'Email', type: 'text', aliases: fieldAliases(RESIDENTS_DEF, 'email') },
     { key: 'type', label: 'Role', type: 'select', options: [{ value: 'Tenant', label: 'Tenant' }, { value: 'Owner', label: 'Owner-Occupied' }], aliases: fieldAliases(RESIDENTS_DEF, 'type') },
     { key: 'flatId', label: 'Flat', type: 'select', options: flats.map((f) => ({ value: String(f.id), label: `${buildingName(f.buildingId)} · ${f.unitNo}` })), required: true, aliases: fieldAliases(RESIDENTS_DEF, 'flatRef') },
+    { key: 'leaseStart', label: 'Lease Start', type: 'date', required: true, aliases: fieldAliases(TENANCIES_DEF, 'leaseStart') },
+    { key: 'monthlyRent', label: 'Monthly Rent', type: 'number', required: true, aliases: fieldAliases(TENANCIES_DEF, 'monthlyRent') },
   ];
 
   // Person matching for the Bulk Add preview grid and the commit step below
   // share this exact function, so what's shown before "Review & Add" is
-  // guaranteed to match what actually happens on save.
-  function matchBulkResidentRow(r: BulkResidentRow) {
+  // guaranteed to match what actually happens on save. `against` defaults to
+  // the live resident list (for the preview grid) but the commit loop below
+  // passes its own running snapshot, so a person who appears twice in the
+  // same imported file (e.g. two flats) resolves to the record it just
+  // created moments earlier in this same batch, rather than creating a
+  // second duplicate person because the page's live query hasn't caught up
+  // mid-transaction.
+  function matchBulkResidentRow(r: BulkResidentRow, against: Resident[] = residents) {
     const flat = flats.find((f) => f.id === Number(r.flatId));
     return matchPerson({
       personId: r.personId, mobile: r.mobile, email: r.email,
       buildingId: flat?.buildingId, flatId: flat?.id,
       name: composeName(r.firstName, r.lastName),
-    }, residents);
+    }, against);
   }
 
   function bulkResidentRowNote(r: BulkResidentRow): { text: string; tone: 'neutral' | 'warn' | 'good' } | null {
@@ -362,29 +371,39 @@ export default function Residents() {
     return { text: 'New record', tone: 'neutral' };
   }
 
-  // Bulk Add lives on the Residents page, so every row always ends up
-  // Resident (isResident=true). If the row matches an existing person
-  // (Person ID first, then the same fallback fields the full Import
-  // Wizard uses - see matchPerson), that person is linked/updated instead
-  // of creating a duplicate; only rows with no match at all become new
-  // Resident records. "Owner-Occupied" additionally marks isOwner - it
-  // never creates an offsite-owner-only record (those belong on the
-  // Owners page, since they must NOT show up here or count as a resident).
+  // Bulk Add lives on the Residents page, so every row always resolves a
+  // Person first (create or link, see matchBulkResidentRow/matchPerson),
+  // then a Tenancy is created for that Person + Flat - mirroring exactly
+  // how the Owners page's Bulk Add resolves a Person before creating an
+  // Ownership. A Tenancy is never created without both a resolved
+  // residentId and a resolved flat: rows with no selected flat are
+  // skipped entirely (`continue` below) before either record is touched.
+  // "Owner-Occupied" additionally marks isOwner - it never creates an
+  // offsite-owner-only record (those belong on the Owners page, since they
+  // must NOT show up here or count as a resident).
   async function commitBulkAdd(rows: BulkResidentRow[]) {
-    await db.transaction('rw', [db.residents, db.auditLog, db.sequences], async () => {
+    await db.transaction('rw', [db.residents, db.tenancies, db.auditLog, db.sequences], async () => {
+      // Mutable running snapshot of residents seen so far in this batch,
+      // seeded from the page's current data and updated as each row is
+      // resolved, so later rows in the same import can match a person this
+      // same batch just created (see matchBulkResidentRow above).
+      const workingResidents: Resident[] = [...residents];
+
       for (const r of rows) {
         const flat = flats.find((f) => f.id === Number(r.flatId));
-        if (!flat) continue;
+        if (!flat) continue; // unresolved Flat - never create a Tenancy (or update a Person's flat) without one
         const name = composeName(r.firstName, r.lastName);
-        const match = matchBulkResidentRow(r);
+        const match = matchBulkResidentRow(r, workingResidents);
+        let residentId: number;
 
         if (match.residentId !== undefined) {
           // Link to the existing person - merge in only the non-blank
           // fields from the sheet (never blank out data already on file),
           // and OR-merge role flags rather than overwriting them, exactly
           // like a second sheet in the full Import Wizard would.
-          const existing = residents.find((x) => x.id === match.residentId);
+          const existing = workingResidents.find((x) => x.id === match.residentId);
           if (!existing) continue;
+          residentId = existing.id!;
           const patch: Partial<Resident> = {
             isResident: true,
             isOwner: (existing.isOwner ?? existing.type === 'Owner') || r.type === 'Owner',
@@ -395,35 +414,63 @@ export default function Residents() {
           if (!existing.flatId) { patch.flatId = flat.id!; patch.buildingId = flat.buildingId; patch.unitLabel = flat.unitNo; }
           patch.type = patch.isOwner ? 'Owner' : existing.type;
           await db.residents.update(existing.id!, patch);
+          Object.assign(existing, patch); // keep the working snapshot in sync for subsequent rows
           await logAudit({
             action: 'resident_updated', entityType: 'resident', entityId: existing.id!,
             buildingId: existing.buildingId, flatId: existing.flatId, residentId: existing.id!,
             summary: `Linked existing resident ${existing.name} via bulk import (matched by ${match.matchedBy})`,
           });
-          continue;
+        } else {
+          // No match - create a new resident. A Person ID that didn't match
+          // anything becomes this new record's display ID (reserving it so
+          // future auto-generated IDs never collide), exactly like the full
+          // Import Wizard does for an unrecognized source ID.
+          const personId = r.personId.trim();
+          let displayId: string;
+          if (personId) { await reserveDisplayId('residents', personId); displayId = personId; }
+          else displayId = await nextDisplayId('residents');
+
+          const newResident: Resident = {
+            ...emptyForm(flats), name, firstName: r.firstName.trim(), lastName: r.lastName.trim(),
+            mobile: r.mobile.trim(), email: r.email.trim(), type: r.type,
+            isResident: true, isOwner: r.type === 'Owner',
+            flatId: flat.id!, buildingId: flat.buildingId, unitLabel: flat.unitNo,
+            displayId,
+          };
+          residentId = (await db.residents.add(newResident)) as number;
+          workingResidents.push({ ...newResident, id: residentId });
+          await logAudit({
+            action: 'resident_created', entityType: 'resident', entityId: residentId,
+            buildingId: flat.buildingId, flatId: flat.id, residentId,
+            summary: `Added resident ${name} (${r.type}) via bulk add`,
+          });
         }
 
-        // No match - create a new resident. A Person ID that didn't match
-        // anything becomes this new record's display ID (reserving it so
-        // future auto-generated IDs never collide), exactly like the full
-        // Import Wizard does for an unrecognized source ID.
-        const personId = r.personId.trim();
-        let displayId: string;
-        if (personId) { await reserveDisplayId('residents', personId); displayId = personId; }
-        else displayId = await nextDisplayId('residents');
-
-        const newId = await db.residents.add({
-          ...emptyForm(flats), name, firstName: r.firstName.trim(), lastName: r.lastName.trim(),
-          mobile: r.mobile.trim(), email: r.email.trim(), type: r.type,
-          isResident: true, isOwner: r.type === 'Owner',
-          flatId: flat.id!, buildingId: flat.buildingId, unitLabel: flat.unitNo,
-          displayId,
-        });
-        await logAudit({
-          action: 'resident_created', entityType: 'resident', entityId: newId as number,
-          buildingId: flat.buildingId, flatId: flat.id, residentId: newId as number,
-          summary: `Added resident ${name} (${r.type}) via bulk add`,
-        });
+        // Resolve (never assume) the Tenancy: reuse this same person's
+        // active tenancy for this exact flat if one already exists rather
+        // than creating a duplicate lease record; only create new otherwise.
+        const rent = r.monthlyRent === '' ? await suggestRentForFlat(flat.id!) : Number(r.monthlyRent);
+        const activeTenancy = await getActiveTenancyForResident(residentId);
+        if (activeTenancy && activeTenancy.flatId === flat.id) {
+          await db.tenancies.update(activeTenancy.id!, {
+            leaseStart: r.leaseStart || activeTenancy.leaseStart,
+            monthlyRent: rent,
+          });
+        } else {
+          const tenancyDisplayId = await nextDisplayId('tenancies');
+          const tenancyId = await db.tenancies.add({
+            residentId, flatId: flat.id!, buildingId: flat.buildingId,
+            leaseType: 'Fixed Term', leaseStart: r.leaseStart || todayISO(), leaseEnd: '',
+            moveIn: r.leaseStart || todayISO(), moveOut: '', monthlyRent: rent, currency: 'USD', deposit: 0,
+            paymentFrequency: 'Monthly', occupancyStatus: 'active', notes: '',
+            displayId: tenancyDisplayId,
+          });
+          await logAudit({
+            action: 'tenancy_created', entityType: 'tenancy', entityId: tenancyId as number,
+            buildingId: flat.buildingId, flatId: flat.id, residentId,
+            summary: `Created tenancy for resident #${residentId} via bulk add`,
+          });
+        }
       }
     });
   }
@@ -664,10 +711,11 @@ export default function Residents() {
         title="Bulk Add Residents"
         entityLabel="resident"
         fields={BULK_FIELDS}
-        makeEmptyRow={() => ({ personId: '', firstName: '', lastName: '', mobile: '', email: '', type: 'Tenant', flatId: String(flats[0]?.id ?? '') })}
+        makeEmptyRow={() => ({ personId: '', firstName: '', lastName: '', mobile: '', email: '', type: 'Tenant', flatId: String(flats[0]?.id ?? ''), leaseStart: todayISO(), monthlyRent: '' })}
         isRowBlank={(r) => !r.firstName.trim() && !r.lastName.trim()}
         onCommit={commitBulkAdd}
         rowNote={bulkResidentRowNote}
+        entityKey={['residents', 'tenancies']}
       />
 
       <ConfirmDialog

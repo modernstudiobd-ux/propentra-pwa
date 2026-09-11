@@ -171,6 +171,7 @@ export default function Expenses() {
         makeEmptyRow={() => ({ category: EXPENSE_CATEGORIES[0], amount: '', vendor: '', date: todayISO() })}
         isRowBlank={(r) => r.amount === '' && !r.vendor.trim()}
         onCommit={commitBulkAdd}
+        entityKey="expenses"
       />
 
       <ConfirmDialog

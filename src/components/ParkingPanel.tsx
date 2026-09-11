@@ -166,6 +166,7 @@ export default function ParkingPanel({
         fields={bulkParkingFields} makeEmptyRow={bulkParkingEmptyRow}
         isRowBlank={(r) => !r.spaceNumber.trim()}
         onCommit={bulkCommit}
+        entityKey="parkingSpaces"
       />
 
       <ConfirmDialog

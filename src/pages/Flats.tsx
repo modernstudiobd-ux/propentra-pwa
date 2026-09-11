@@ -263,6 +263,7 @@ export default function Flats() {
         fields={bulkFlatFields} makeEmptyRow={bulkFlatEmptyRow}
         isRowBlank={(r) => !r.unitNo.trim()}
         onCommit={bulkCommit}
+        entityKey="flats"
       />
 
       <ConfirmDialog

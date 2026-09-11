@@ -288,14 +288,19 @@ export default function Owners() {
   // share this exact function, so what's shown before "Review & Add" is
   // guaranteed to match what actually happens on save. Matches across ALL
   // residents (not just existing owners) - the same person might already
-  // be on file as a Tenant, for instance.
-  function matchBulkOwnerRow(r: BulkOwnerRow) {
+  // be on file as a Tenant, for instance. `against` defaults to the live
+  // resident list (for the preview grid); the commit loop below passes its
+  // own running snapshot so a person appearing twice in the same imported
+  // file (e.g. owning two flats) resolves to the record this same batch
+  // just created, instead of creating a second duplicate person because
+  // the page's live query hasn't caught up mid-transaction.
+  function matchBulkOwnerRow(r: BulkOwnerRow, against: Resident[] = residents) {
     const flat = flats.find((f) => String(f.id) === r.flatId);
     return matchPerson({
       personId: r.personId, mobile: r.mobile, email: r.email,
       buildingId: flat?.buildingId, flatId: flat?.id,
       name: [r.firstName, r.lastName].filter((s) => s.trim()).join(' ').trim(),
-    }, residents);
+    }, against);
   }
 
   function bulkOwnerRowNote(r: BulkOwnerRow): { text: string; tone: 'neutral' | 'warn' | 'good' } | null {
@@ -321,15 +326,21 @@ export default function Owners() {
     const validRows = rows.filter((r) => flats.some((f) => String(f.id) === r.flatId));
     if (validRows.length === 0) return;
     await db.transaction('rw', [db.residents, db.ownerships, db.auditLog, db.sequences], async () => {
+      // Mutable running snapshots, seeded from the page's current data and
+      // updated as each row is resolved, so later rows in the same import
+      // can match a person or ownership this same batch just created.
+      const workingResidents: Resident[] = [...residents];
+      const workingOwnerships = [...ownerships];
+
       for (const r of validRows) {
         const flat = flats.find((f) => String(f.id) === r.flatId)!;
         const name = [r.firstName, r.lastName].filter((s) => s.trim()).join(' ').trim();
         const pct = r.ownershipPct === '' ? 100 : Number(r.ownershipPct);
-        const match = matchBulkOwnerRow(r);
+        const match = matchBulkOwnerRow(r, workingResidents);
 
         let residentId: number;
         if (match.residentId !== undefined) {
-          const existing = residents.find((x) => x.id === match.residentId);
+          const existing = workingResidents.find((x) => x.id === match.residentId);
           if (!existing) continue;
           residentId = existing.id!;
           const patch: Partial<Resident> = {
@@ -341,6 +352,7 @@ export default function Owners() {
           if (r.email.trim()) patch.email = r.email.trim();
           patch.type = patch.isResident && !patch.isOwner ? 'Tenant' : existing.type;
           await db.residents.update(existing.id!, patch);
+          Object.assign(existing, patch); // keep the working snapshot in sync for subsequent rows
           await logAudit({
             action: 'resident_updated', entityType: 'resident', entityId: existing.id!,
             buildingId: existing.buildingId, flatId: existing.flatId, residentId: existing.id!,
@@ -352,13 +364,15 @@ export default function Owners() {
           if (personId) { await reserveDisplayId('residents', personId); displayId = personId; }
           else displayId = await nextDisplayId('residents');
 
-          residentId = (await db.residents.add({
+          const newResident = {
             name, firstName: r.firstName.trim(), lastName: r.lastName.trim(), mobile: r.mobile.trim(), email: r.email.trim(),
             flatId: flat.id!, buildingId: flat.buildingId, unitLabel: flat.unitNo,
             type: r.alsoResident ? 'Tenant' : 'Owner', isOwner: true, isResident: r.alsoResident,
             status: 'current', moveInDate: r.alsoResident ? todayISO() : undefined, isBillingContact: false,
             displayId,
-          } as Resident)) as number;
+          } as Resident;
+          residentId = (await db.residents.add(newResident)) as number;
+          workingResidents.push({ ...newResident, id: residentId });
           await logAudit({
             action: 'resident_created', entityType: 'resident', entityId: residentId,
             buildingId: flat.buildingId, flatId: flat.id, residentId,
@@ -368,18 +382,22 @@ export default function Owners() {
 
         // Reuse an existing Ownership of this same flat rather than adding
         // a duplicate one - update its terms instead.
-        const existingOwnership = ownerships.find((o) => o.residentId === residentId && o.flatId === flat.id);
+        const existingOwnership = workingOwnerships.find((o) => o.residentId === residentId && o.flatId === flat.id);
         if (existingOwnership?.id !== undefined) {
-          await db.ownerships.update(existingOwnership.id, {
-            status: 'active', ownershipPct: pct, purchaseDate: r.purchaseDate || existingOwnership.purchaseDate, ownershipType: r.ownershipType || existingOwnership.ownershipType,
-          });
+          const ownershipPatch = {
+            status: 'active' as const, ownershipPct: pct, purchaseDate: r.purchaseDate || existingOwnership.purchaseDate, ownershipType: r.ownershipType || existingOwnership.ownershipType,
+          };
+          await db.ownerships.update(existingOwnership.id, ownershipPatch);
+          Object.assign(existingOwnership, ownershipPatch);
         } else {
           const ownershipDisplayId = await nextDisplayId('ownerships');
-          await db.ownerships.add({
-            residentId, flatId: flat.id!, buildingId: flat.buildingId, status: 'active',
+          const newOwnership = {
+            residentId, flatId: flat.id!, buildingId: flat.buildingId, status: 'active' as const,
             ownershipPct: pct, purchaseDate: r.purchaseDate || todayISO(), ownershipType: r.ownershipType || 'Sole',
             displayId: ownershipDisplayId,
-          });
+          };
+          const newOwnershipId = await db.ownerships.add(newOwnership);
+          workingOwnerships.push({ ...newOwnership, id: newOwnershipId as number });
         }
       }
     });
@@ -557,6 +575,7 @@ export default function Owners() {
         isRowBlank={(r) => !r.firstName.trim() && !r.lastName.trim()}
         onCommit={commitBulkAdd}
         rowNote={bulkOwnerRowNote}
+        entityKey={['ownerships', 'residents']}
       />
 
       <ConfirmDialog

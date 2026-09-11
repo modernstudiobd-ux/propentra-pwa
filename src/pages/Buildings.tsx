@@ -203,6 +203,7 @@ export default function Buildings() {
         fields={bulkFields} makeEmptyRow={bulkEmptyRow}
         isRowBlank={(r) => !r.name.trim() && !r.address.trim()}
         onCommit={bulkCommit}
+        entityKey="buildings"
       />
 
       <ConfirmDialog
