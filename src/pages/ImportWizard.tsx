@@ -14,6 +14,7 @@ import {
   commitImport, ImportRollbackError, type ProcessedRow, type RefResolution, type DuplicateDecision, type ImportRunResult,
 } from '@/lib/import/engine';
 import { downloadCsvTemplate, downloadErrorReport } from '@/lib/import/csvExport';
+import { downloadSampleWorkbook } from '@/lib/import/sampleWorkbook';
 import MappingStep from '@/components/import/MappingStep';
 import type { OtherSheetInfo } from '@/components/import/ColumnPicker';
 import RelationshipStep from '@/components/import/RelationshipStep';
@@ -365,7 +366,11 @@ export default function ImportWizard() {
           </div>
 
           <div className="pt-2 border-t border-gray-100">
-            <div className="text-sm font-medium text-gray-700 mb-2">Don't have a file ready? Download a starter template:</div>
+            <div className="text-sm font-medium text-gray-700 mb-2">Don't have a file ready?</div>
+            <button className="btn-primary flex items-center gap-1.5 text-sm mb-3" onClick={downloadSampleWorkbook}>
+              <Download size={14} /> Download Full Sample Workbook (.xlsx)
+            </button>
+            <div className="text-xs text-gray-400 mb-2">One tab per data type (Buildings, Flats, Owners, Tenants, Tenancies, Ownership, Parking, Storage) with realistic linked example rows and a Read Me tab. Or grab a single-entity starter CSV instead:</div>
             <div className="flex flex-wrap gap-2">
               {IMPORT_ENTITY_ORDER.map((key) => (
                 <button key={key} className="btn-secondary flex items-center gap-1.5 text-xs" onClick={() => downloadCsvTemplate(key)}>

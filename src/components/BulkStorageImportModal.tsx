@@ -21,7 +21,7 @@ interface MatchedRow {
 // Storage isn't its own entity - it's just the `storageIncluded` flag on a
 // Flat - so this reuses FLATS_DEF's already-curated header aliases for
 // "Building Name" and "Storage Included" instead of a Bulk *Add* flow.
-const MAP_FIELDS: (MappableField & { required?: boolean })[] = [
+export const MAP_FIELDS: (MappableField & { required?: boolean })[] = [
   { key: 'buildingText', label: 'Building (optional)', aliases: fieldAliases(FLATS_DEF, 'buildingRef') },
   { key: 'unitNoText', label: 'Unit No.', required: true, aliases: fieldAliases(FLATS_DEF, 'unitNo') },
   { key: 'included', label: 'Storage Included', required: true, aliases: fieldAliases(FLATS_DEF, 'storageIncluded') },
