@@ -15,12 +15,15 @@ import { validateOwnershipPct } from '@/lib/ownership';
 import { OWNERSHIP_TYPES, OWNERSHIP_STATUSES } from '@/types';
 import { RESIDENTS_DEF, OWNERSHIPS_DEF, fieldAliases } from '@/lib/import/schemas';
 import { matchPerson } from '@/lib/import/personMatch';
-import type { Resident, Ownership } from '@/types';
+import { classifyOwnerResidency, buildingFullAddress } from '@/lib/import/ownerClassification';
+import type { Resident, Ownership, Building } from '@/types';
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 
 interface BulkOwnerRow {
   personId: string; firstName: string; lastName: string; mobile: string; email: string;
+  /** Owner's own mailing/home address, if given - compared against the matched flat's building address to auto-classify owner-occupancy (see classifyOwnerResidency). Free text; not required. */
+  address: string;
   alsoResident: boolean; flatId: string; ownershipPct: number | ''; purchaseDate: string; ownershipType: string;
 }
 
@@ -277,12 +280,37 @@ export default function Owners() {
     { key: 'ownershipPct', label: 'Ownership %', type: 'number', aliases: fieldAliases(OWNERSHIPS_DEF, 'ownershipPct') },
     { key: 'ownershipType', label: 'Type', type: 'select', options: [...OWNERSHIP_TYPES], aliases: fieldAliases(OWNERSHIPS_DEF, 'ownershipType') },
     { key: 'purchaseDate', label: 'Purchase Date', type: 'date', aliases: fieldAliases(OWNERSHIPS_DEF, 'purchaseDate') },
-    { key: 'alsoResident', label: 'Also Resident', type: 'checkbox', aliases: fieldAliases(RESIDENTS_DEF, 'isResident') },
+    {
+      key: 'address', label: 'Owner Address (optional)', type: 'text',
+      placeholder: 'Leave blank to skip auto owner-occupied detection',
+      aliases: ['address', 'owneraddress', 'mailingaddress', 'homeaddress', 'residentialaddress', 'currentaddress', 'contactaddress', 'residenceaddress'],
+    },
+    {
+      key: 'alsoResident', label: 'Also Resident', type: 'checkbox', aliases: fieldAliases(RESIDENTS_DEF, 'isResident'),
+    },
   ];
   const bulkOwnerEmptyRow = (): BulkOwnerRow => ({
-    personId: '', firstName: '', lastName: '', mobile: '', email: '', alsoResident: false,
+    personId: '', firstName: '', lastName: '', mobile: '', email: '', address: '', alsoResident: false,
     flatId: String(flats[0]?.id ?? ''), ownershipPct: 100, purchaseDate: todayISO(), ownershipType: 'Sole',
   });
+
+  /**
+   * Owner-occupancy classification for a Bulk Add row: an explicit "Also
+   * Resident" Yes always wins; otherwise the owner's address (if given) is
+   * compared against the matched flat's building address - see
+   * classifyOwnerResidency for the full rule. Address text is normalized
+   * (case/whitespace/punctuation/line breaks/common abbreviations) before
+   * comparison, never compared as raw strings.
+   */
+  function classifyBulkOwnerRow(r: BulkOwnerRow) {
+    const flat = flats.find((f) => String(f.id) === r.flatId);
+    const building = buildings.find((b) => b.id === flat?.buildingId);
+    return classifyOwnerResidency({
+      ownerAddress: r.address,
+      buildingAddress: buildingFullAddress(building as Building | undefined),
+      explicitResident: r.alsoResident,
+    });
+  }
 
   // Person matching for the Bulk Add preview grid and the commit step below
   // share this exact function, so what's shown before "Review & Add" is
@@ -305,14 +333,32 @@ export default function Owners() {
 
   function bulkOwnerRowNote(r: BulkOwnerRow): { text: string; tone: 'neutral' | 'warn' | 'good' } | null {
     const m = matchBulkOwnerRow(r);
-    if (m.ambiguous) return { text: 'Multiple matches - will import as new', tone: 'warn' };
-    if (m.residentId !== undefined) {
+    const residency = classifyBulkOwnerRow(r);
+    // Only surface the address-driven outcome when it isn't already obvious
+    // from an explicit "Also Resident" checkbox - that case needs no
+    // explanation, it's just what the person asked for.
+    const addressNote = r.alsoResident
+      ? null
+      : residency.status === 'match'
+        ? 'owner-occupied (address matches building)'
+        : residency.status === 'review'
+          ? 'address needs review - kept as Owner only'
+          : null;
+
+    let base: { text: string; tone: 'neutral' | 'warn' | 'good' };
+    if (m.ambiguous) base = { text: 'Multiple matches - will import as new', tone: 'warn' };
+    else if (m.residentId !== undefined) {
       const existing = residents.find((x) => x.id === m.residentId);
       const alreadyOwns = ownerships.some((o) => o.residentId === m.residentId && String(o.flatId) === r.flatId);
-      return { text: `Linked · existing ${existing?.displayId ?? '#' + m.residentId}${alreadyOwns ? ' (updates ownership)' : ''}`, tone: 'good' };
-    }
-    if (m.personIdInvalid) return { text: `Person ID "${r.personId.trim()}" not found - will create new`, tone: 'warn' };
-    return { text: 'New record', tone: 'neutral' };
+      base = { text: `Linked · existing ${existing?.displayId ?? '#' + m.residentId}${alreadyOwns ? ' (updates ownership)' : ''}`, tone: 'good' };
+    } else if (m.personIdInvalid) base = { text: `Person ID "${r.personId.trim()}" not found - will create new`, tone: 'warn' };
+    else base = { text: 'New record', tone: 'neutral' };
+
+    if (!addressNote) return base;
+    return {
+      text: `${base.text} · ${addressNote}`,
+      tone: residency.status === 'review' ? 'warn' : base.tone,
+    };
   }
 
   // Each row links to an existing person when one matches (Person ID first,
@@ -337,6 +383,11 @@ export default function Owners() {
         const name = [r.firstName, r.lastName].filter((s) => s.trim()).join(' ').trim();
         const pct = r.ownershipPct === '' ? 100 : Number(r.ownershipPct);
         const match = matchBulkOwnerRow(r, workingResidents);
+        const residency = classifyBulkOwnerRow(r);
+        const address = r.address.trim();
+        const residencyNote = residency.status === 'match'
+          ? (r.alsoResident ? '' : ' (owner-occupied - address match)')
+          : residency.status === 'review' ? ' (address needs review - kept as Owner only)' : '';
 
         let residentId: number;
         if (match.residentId !== undefined) {
@@ -345,18 +396,22 @@ export default function Owners() {
           residentId = existing.id!;
           const patch: Partial<Resident> = {
             isOwner: true,
-            isResident: (existing.isResident ?? existing.type !== 'Owner') || r.alsoResident,
+            // Never demotes an already-resident owner - only ever adds the
+            // residency, whether stated explicitly or inferred from a
+            // confident address match.
+            isResident: (existing.isResident ?? existing.type !== 'Owner') || residency.isResident,
           };
           if (r.firstName.trim() || r.lastName.trim()) { patch.name = name || existing.name; patch.firstName = r.firstName.trim() || existing.firstName; patch.lastName = r.lastName.trim() || existing.lastName; }
           if (r.mobile.trim()) patch.mobile = r.mobile.trim();
           if (r.email.trim()) patch.email = r.email.trim();
+          if (address) patch.mailingAddress = { ...existing.mailingAddress, line1: address };
           patch.type = patch.isResident && !patch.isOwner ? 'Tenant' : existing.type;
           await db.residents.update(existing.id!, patch);
           Object.assign(existing, patch); // keep the working snapshot in sync for subsequent rows
           await logAudit({
             action: 'resident_updated', entityType: 'resident', entityId: existing.id!,
             buildingId: existing.buildingId, flatId: existing.flatId, residentId: existing.id!,
-            summary: `Linked existing owner ${existing.name} via bulk import (matched by ${match.matchedBy})`,
+            summary: `Linked existing owner ${existing.name} via bulk import (matched by ${match.matchedBy})${residencyNote}`,
           });
         } else {
           const personId = r.personId.trim();
@@ -367,8 +422,9 @@ export default function Owners() {
           const newResident = {
             name, firstName: r.firstName.trim(), lastName: r.lastName.trim(), mobile: r.mobile.trim(), email: r.email.trim(),
             flatId: flat.id!, buildingId: flat.buildingId, unitLabel: flat.unitNo,
-            type: r.alsoResident ? 'Tenant' : 'Owner', isOwner: true, isResident: r.alsoResident,
-            status: 'current', moveInDate: r.alsoResident ? todayISO() : undefined, isBillingContact: false,
+            type: residency.isResident ? 'Tenant' : 'Owner', isOwner: true, isResident: residency.isResident,
+            status: 'current', moveInDate: residency.isResident ? todayISO() : undefined, isBillingContact: false,
+            ...(address ? { mailingAddress: { line1: address } } : {}),
             displayId,
           } as Resident;
           residentId = (await db.residents.add(newResident)) as number;
@@ -376,7 +432,7 @@ export default function Owners() {
           await logAudit({
             action: 'resident_created', entityType: 'resident', entityId: residentId,
             buildingId: flat.buildingId, flatId: flat.id, residentId,
-            summary: `Added owner ${name}${r.alsoResident ? ' (also resident)' : ''} (bulk import)`,
+            summary: `Added owner ${name}${residency.isResident ? ' (also resident)' : ''} (bulk import)${residencyNote}`,
           });
         }
 
